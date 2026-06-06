@@ -1,6 +1,9 @@
 """Apply v_* views and regenerate schema/schema_context.md from system.columns.
-Usage: source .env && python schema/gen_schema_context.py
+
+  source .env && python schema/gen_schema_context.py            # apply seed views + md
+  source .env && python schema/gen_schema_context.py --no-apply  # md only (e.g. after CDC repoint)
 """
+import argparse
 from arena.config import load_config
 from agents.chclient import make_admin_client
 
@@ -18,13 +21,20 @@ SEMANTICS = {
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-apply", action="store_true",
+                    help="skip applying seed-based views; just generate the md "
+                         "from existing v_* (use after a CDC repoint)")
+    args = ap.parse_args()
+
     cfg = load_config()
     db = cfg.clickhouse.database
     admin = make_admin_client(cfg.clickhouse)
-    with open("schema/clickhouse_views.sql") as f:
-        for stmt in f.read().split(";"):
-            if stmt.strip():
-                admin.command(stmt)
+    if not args.no_apply:
+        with open("schema/clickhouse_views.sql") as f:
+            for stmt in f.read().split(";"):
+                if stmt.strip():
+                    admin.command(stmt)
 
     lines = ["# Schema context (agent-facing)\n",
              "Query ONLY these views. ClickHouse SQL dialect. "

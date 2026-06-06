@@ -22,6 +22,19 @@ leaderboard is rendered from a ClickHouse results table (the single source of tr
 - **Read-only safety:** agent SQL runs as a `readonly=1` ClickHouse user with server-side
   resource limits, behind a SELECT-only validator (`agents/sqlguard.py`).
 
+## One-command lifecycle
+
+```bash
+scripts/arena.sh up               # full stack: Aurora + ClickPipes CDC + ClickStack collector
+scripts/arena.sh up --seed-only   # measurement core only (ClickHouse seed, no AWS/Aurora)
+scripts/arena.sh status           # show Aurora / pipe / collector / view counts
+scripts/arena.sh down             # tear down billable infra (pipe + Aurora) + collector
+scripts/arena.sh down --purge     # also drop ClickHouse arena_cdc/arena_house + RO user + otel_*
+```
+`up`/`down` are idempotent and use `AWS_PROFILE` (default `sa`); they need a valid
+SSO session (`aws sso login --profile sa`). The manual steps below are what
+`arena.sh` automates, for reference.
+
 ## Quickstart
 
 ```bash
