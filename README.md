@@ -6,8 +6,9 @@ grades each answer by **execution accuracy** (result-set comparison, not SQL tex
 ranks configs by **cost-per-correct-answer**. Rich traces go to LangFuse Cloud; the
 leaderboard is rendered from a ClickHouse results table (the single source of truth).
 
-> **Status:** M0–M3 (measurement core) complete. M4 full grid · M5 Aurora+ClickPipes CDC ·
-> M6 ClickStack/OTel · M7 serving `/ask` API are follow-on plans.
+> **Status:** M0–M4, M6, M7 complete and live. M5 (Aurora + ClickPipes CDC) is built
+> as Terraform + scripts + runbook, gated on a `terraform apply` + a ClickHouse Cloud
+> org API key (see `infra/README_clickpipes.md`).
 
 ## Architecture (this POC)
 
@@ -43,6 +44,24 @@ AWS_PROFILE=sa python -m eval.harness     # run the grid against real Bedrock
 
 uvicorn dashboard.app:app --port 8000     # → http://localhost:8000
 ```
+
+### Observability (ClickStack) + live serving
+```bash
+docker compose up -d                                   # ClickStack OTel collector
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+  python -m observability.cdc_freshness --watch 15     # CDC freshness gauge → ClickStack
+AWS_PROFILE=sa OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+  uvicorn serving.api:app --port 8100                  # live /ask endpoint
+curl -s localhost:8100/ask -H 'content-type: application/json' \
+  -d '{"question":"How many customers are there?","config_id":"nova-lite__P1_zeroshot"}'
+```
+Telemetry lands in the same ClickHouse service (`default.otel_*` tables) — one
+engine for the data, the telemetry, and the AI's behavior.
+
+### Live data pipeline (M5)
+See `infra/README_clickpipes.md`: `terraform apply` Aurora, seed it
+(`--target aurora`), create the ClickPipes pipe, then `schema/repoint_views.py`
+swaps `v_*` onto the CDC tables — agents/leaderboard unchanged.
 
 If Bedrock access is unavailable, populate the dashboard with a clearly-labeled
 synthetic run to validate the full pipeline (the dashboard badges it as synthetic):
