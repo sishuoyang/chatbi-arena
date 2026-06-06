@@ -26,8 +26,12 @@ python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # .env already holds CLICKHOUSE_CLOUD_*, LANGFUSE_*, ARENA_RO_PASSWORD.
-# For the real harness you also need AWS creds for ap-southeast-1 Bedrock:
-#   export AWS_PROFILE=<your-profile-with-bedrock-access>
+# For the real harness you also need AWS creds for ap-southeast-1 Bedrock.
+# Verified working: the `sa` SSO profile (account 959934561610, SolutionArchitect).
+#   aws sso login --profile sa
+#   export AWS_PROFILE=sa
+# NOTE: the 164313782301_AccountAdministrators federated-user (acct 888961321587)
+# is hard-denied Bedrock by an identity-based policy — do not use it.
 source .env
 
 python scripts/check_connectivity.py     # CH + LangFuse + Bedrock reachability
@@ -35,13 +39,13 @@ python scripts/setup_clickhouse.py        # create db + read-only user
 python -m datagen.generator --seed 42     # seed ~90 days of e-commerce data
 python schema/gen_schema_context.py       # apply v_* views + write schema_context.md
 pytest -q                                 # 32 unit tests (grading, sqlguard, config, ...)
-python -m eval.harness                    # run the grid (needs Bedrock access)
+AWS_PROFILE=sa python -m eval.harness     # run the grid against real Bedrock
 
 uvicorn dashboard.app:app --port 8000     # → http://localhost:8000
 ```
 
-If Bedrock access is not yet granted, populate the dashboard with a clearly-labeled
-synthetic run to validate the full pipeline:
+If Bedrock access is unavailable, populate the dashboard with a clearly-labeled
+synthetic run to validate the full pipeline (the dashboard badges it as synthetic):
 
 ```bash
 python scripts/seed_mock_results.py       # writes a mock-* run to eval_runs
