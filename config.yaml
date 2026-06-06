@@ -29,19 +29,42 @@ eval:
   default_max_retries: 1
   run_tag: "core"
 
-# Start M1-M3 with ONE cheap model. Verify exact IDs/prices for ap-southeast-1.
+# Prices are illustrative ap-southeast-1 on-demand $/1M tokens — confirm before
+# trusting absolute cost numbers (relative ranking is robust).
 models:
+  - id: apac.amazon.nova-micro-v1:0
+    name: nova-micro
+    family: nova
+    price_per_1m_in: 0.035
+    price_per_1m_out: 0.14
   - id: apac.amazon.nova-lite-v1:0
     name: nova-lite
     family: nova
     price_per_1m_in: 0.06
     price_per_1m_out: 0.24
+  - id: apac.anthropic.claude-3-haiku-20240307-v1:0
+    name: claude-3-haiku
+    family: claude
+    price_per_1m_in: 0.25
+    price_per_1m_out: 1.25
+  - id: apac.anthropic.claude-3-5-sonnet-20241022-v2:0
+    name: claude-3.5-sonnet
+    family: claude
+    price_per_1m_in: 3.00
+    price_per_1m_out: 15.00
 
 prompts:
   - name: P1_zeroshot
     self_correct: false
+  - name: P2_fewshot
+    self_correct: false
+    k: 2
   - name: P3_dialect
     self_correct: false
+  - name: P4_cot
+    self_correct: false
+  - name: P5_selfcorrect
+    self_correct: true
 
 grid:
   models: ["*"]

@@ -35,7 +35,10 @@ def main() -> None:
     with open("schema/schema_context.md") as f:
         schema_ctx = f.read()
 
-    questions = load_golden()
+    all_questions = load_golden()
+    # Hold out the few-shot example questions so P2 is not graded on its own
+    # examples; every config is scored on the SAME evaluation set for fairness.
+    questions = [q for q in all_questions if not q.fewshot_holdout]
     if args.limit:
         questions = questions[:args.limit]
 
@@ -55,7 +58,7 @@ def main() -> None:
         for pname in prompt_names:
             pcfg = cfg.prompt_by_name(pname)
             config_id = f"{mname}__{pname}"
-            examples = fewshot_examples(questions, pcfg.k) if pcfg.k else None
+            examples = fewshot_examples(all_questions, pcfg.k) if pcfg.k else None
             for q in questions:
                 gold_rows, gold_cols = golden_cache[q.id]
                 t0 = time.time()
