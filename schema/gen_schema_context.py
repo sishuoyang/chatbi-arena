@@ -1,0 +1,48 @@
+"""Apply v_* views and regenerate schema/schema_context.md from system.columns.
+Usage: source .env && python schema/gen_schema_context.py
+"""
+from arena.config import load_config
+from agents.chclient import make_admin_client
+
+VIEWS = ["v_customers", "v_products", "v_orders", "v_order_items", "v_events"]
+
+SEMANTICS = {
+    "v_orders.status": "one of placed|paid|shipped|delivered|cancelled|returned",
+    "v_orders.channel": "one of web|ios|android|partner",
+    "v_customers.country": "ISO-ish: SG|VN|TH|ID|AU|IN|TW|JP",
+    "v_customers.segment": "consumer|smb|enterprise",
+    "v_products.category": "electronics|home|apparel|grocery|beauty",
+    "v_events.event_type": "view|search|add_to_cart|checkout|purchase",
+    "v_order_items.unit_price": "price at time of sale",
+}
+
+
+def main() -> None:
+    cfg = load_config()
+    db = cfg.clickhouse.database
+    admin = make_admin_client(cfg.clickhouse)
+    with open("schema/clickhouse_views.sql") as f:
+        for stmt in f.read().split(";"):
+            if stmt.strip():
+                admin.command(stmt)
+
+    lines = ["# Schema context (agent-facing)\n",
+             "Query ONLY these views. ClickHouse SQL dialect. "
+             "Revenue = quantity*unit_price - discount.\n"]
+    for v in VIEWS:
+        cols = admin.query(
+            "SELECT name, type FROM system.columns "
+            f"WHERE database = '{db}' AND table = '{v}' ORDER BY position"
+        ).result_rows
+        lines.append(f"\n## {v}")
+        for name, typ in cols:
+            sem = SEMANTICS.get(f"{v}.{name}", "")
+            sem = f" — {sem}" if sem else ""
+            lines.append(f"- `{name}` {typ}{sem}")
+    with open("schema/schema_context.md", "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("wrote schema/schema_context.md")
+
+
+if __name__ == "__main__":
+    main()

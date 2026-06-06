@@ -16,8 +16,19 @@ def main() -> None:
 
     admin.command(
         f"CREATE USER IF NOT EXISTS {ch.ro_user} "
-        f"IDENTIFIED WITH sha256_password BY '{ch.ro_password}' "
-        f"SETTINGS readonly = 1"
+        f"IDENTIFIED WITH sha256_password BY '{ch.ro_password}'"
+    )
+    # Enforce resource limits + read-only as the user's own server-side settings.
+    # readonly=1 means the user cannot run non-SELECT statements AND cannot change
+    # any of these settings at query time, so the limits are non-negotiable.
+    lim = ch.query_limits
+    admin.command(
+        f"ALTER USER {ch.ro_user} SETTINGS "
+        f"max_execution_time = {lim.max_execution_time}, "
+        f"max_result_rows = {lim.max_result_rows}, "
+        f"max_memory_usage = {lim.max_memory_usage}, "
+        f"max_rows_to_read = {lim.max_rows_to_read}, "
+        f"readonly = 1"
     )
     # Least privilege: SELECT only on the arena database (tighten to v_* later).
     admin.command(f"GRANT SELECT ON {ch.database}.* TO {ch.ro_user}")

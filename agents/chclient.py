@@ -26,15 +26,9 @@ class ROClickHouseClient:
 
     def __init__(self, cfg: ClickHouseCfg):
         self._cfg = cfg
-        lim = cfg.query_limits
-        self._settings = {
-            "readonly": 1,
-            "max_execution_time": lim.max_execution_time,
-            "max_result_rows": lim.max_result_rows,
-            "max_memory_usage": lim.max_memory_usage,
-            "max_rows_to_read": lim.max_rows_to_read,
-            "result_overflow_mode": "throw",
-        }
+        # Resource limits + readonly are enforced as the arena_ro user's own
+        # server-side settings (see scripts/setup_clickhouse.py). A readonly=1
+        # user cannot override settings at query time, so we pass none here.
         self._client = clickhouse_connect.get_client(
             host=cfg.host, port=cfg.port, secure=cfg.secure,
             username=cfg.ro_user, password=cfg.ro_password,
@@ -42,6 +36,6 @@ class ROClickHouseClient:
         )
 
     def query(self, sql: str) -> QueryResult:
-        res = self._client.query(sql, settings=self._settings)
+        res = self._client.query(sql)
         rows = [tuple(r) for r in res.result_rows]
         return QueryResult(rows=rows, cols=list(res.column_names))
