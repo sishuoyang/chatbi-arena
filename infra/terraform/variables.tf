@@ -26,7 +26,7 @@ variable "master_username" {
 
 variable "aurora_engine_version" {
   type        = string
-  default     = "16.4"
+  default     = "16.13"
   description = "Aurora PostgreSQL engine version (check availability in-region)."
 }
 
