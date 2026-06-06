@@ -1,4 +1,5 @@
 from dataclasses import dataclass, asdict
+from datetime import datetime
 
 
 @dataclass
@@ -16,7 +17,7 @@ class EvalRunRow:
     outcome: str
     sql: str
     tags: str
-    data_snapshot_ts: str  # 'YYYY-MM-DD HH:MM:SS'
+    data_snapshot_ts: datetime  # passed straight to the DateTime column
 
 
 _DDL = """

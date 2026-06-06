@@ -72,7 +72,7 @@ def main() -> None:
                     correctness=score, cost_usd=c, latency_ms=latency_ms,
                     retries=ar.attempts - 1, outcome=outcome,
                     sql=ar.sql or "", tags=",".join(q.tags),
-                    data_snapshot_ts=str(snapshot_ts),
+                    data_snapshot_ts=snapshot_ts,
                 ))
                 tracer.trace_run(
                     run_id=run_id, config_id=config_id, question_id=q.id,
