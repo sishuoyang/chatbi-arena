@@ -1,0 +1,21 @@
+# Managed ClickStack OTel collector. Ingests OTLP from local app components
+# (ports 4317 gRPC / 4318 HTTP) and writes traces/metrics/logs into the same
+# ClickHouse Cloud service that holds the business data and eval_runs — so one
+# engine holds the data, the telemetry, and the AI's behavior.
+#
+#   set -a && . ./.env && set +a && docker compose up -d
+#
+# Then point app components at it (default endpoint is localhost:4317):
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 python -m datagen.generator ...
+services:
+  clickstack-otel-collector:
+    image: clickhouse/clickstack-otel-collector:latest
+    container_name: arena-clickstack-collector
+    environment:
+      CLICKHOUSE_ENDPOINT: "https://${CLICKHOUSE_CLOUD_HOST}:8443"
+      CLICKHOUSE_USER: "${CLICKHOUSE_CLOUD_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_CLOUD_PASSWORD}"
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    restart: unless-stopped

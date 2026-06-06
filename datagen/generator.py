@@ -102,6 +102,10 @@ def gen(seed: int, n_customers: int, n_products: int, days: int) -> dict:
 
 
 def write_clickhouse(data: dict) -> None:
+    from observability.instrumentation import init_telemetry
+    tracer, meter = init_telemetry("arena-datagen")
+    rows_counter = meter.create_counter("arena.rows_written", unit="{row}")
+
     cfg = load_config()
     admin = make_admin_client(cfg.clickhouse)
     db = cfg.clickhouse.database
@@ -109,13 +113,18 @@ def write_clickhouse(data: dict) -> None:
         for stmt in f.read().split(";"):
             if stmt.strip():
                 admin.command(stmt)
-    for table, rows in data.items():
-        if not rows:
-            continue
-        ch_rows = [list(r) + [1, 0] for r in rows]  # _peerdb_version=1, not deleted
-        admin.insert(f"{db}.{table}", ch_rows,
-                     column_names=BUSINESS_COLUMNS[table] + PEERDB_COLUMNS)
-        print(f"clickhouse: inserted {len(rows)} into {table}")
+    with tracer.start_as_current_span("seed_clickhouse") as span:
+        total = 0
+        for table, rows in data.items():
+            if not rows:
+                continue
+            ch_rows = [list(r) + [1, 0] for r in rows]  # _peerdb_version=1, not deleted
+            admin.insert(f"{db}.{table}", ch_rows,
+                         column_names=BUSINESS_COLUMNS[table] + PEERDB_COLUMNS)
+            rows_counter.add(len(rows), {"table": table})
+            total += len(rows)
+            print(f"clickhouse: inserted {len(rows)} into {table}")
+        span.set_attribute("arena.rows_total", total)
 
 
 def write_aurora(data: dict, dsn: str) -> None:
