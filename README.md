@@ -6,9 +6,11 @@ grades each answer by **execution accuracy** (result-set comparison, not SQL tex
 ranks configs by **cost-per-correct-answer**. Rich traces go to LangFuse Cloud; the
 leaderboard is rendered from a ClickHouse results table (the single source of truth).
 
-> **Status:** M0–M4, M6, M7 complete and live. M5 (Aurora + ClickPipes CDC) is built
-> as Terraform + scripts + runbook, gated on a `terraform apply` + a ClickHouse Cloud
-> org API key (see `infra/README_clickpipes.md`).
+> **Status:** M0–M7 complete and live. M5 (Aurora + ClickPipes CDC) is provisioned end
+> to end: Aurora Serverless v2 → ClickPipes Postgres CDC → `arena_cdc` tables, with the
+> `v_*` views repointed onto them (verified: a status UPDATE in Aurora propagates to the
+> views while the row count stays constant — ReplacingMergeTree dedup). See
+> `infra/README_clickpipes.md`. Tear down with `terraform destroy` to stop billing.
 
 ## Architecture (this POC)
 

@@ -39,7 +39,24 @@ python -m datagen.generator --target aurora --seed 42        # ~90d of history
 # (ClickPipes can also create the publication itself if the role may.)
 ```
 
-## 3. Create the ClickPipes Postgres pipe (console)
+## 3. Create the ClickPipes Postgres pipe
+
+**Automated (CLI/REST API):** with `CH_CLOUD_KEY_ID`/`CH_CLOUD_KEY_SECRET` in `.env`:
+```bash
+# create the target db first, then the pipe
+python -c "from arena.config import load_config; from agents.chclient import make_admin_client; make_admin_client(load_config().clickhouse, database='default').command('CREATE DATABASE IF NOT EXISTS arena_cdc')"
+AURORA_DSN="$(cd infra/terraform && terraform output -raw aurora_dsn)" \
+  python scripts/create_clickpipe.py            # POSTs to the ClickPipes REST API
+```
+Allowlist the ap-southeast-1 ClickPipes egress IPs in Aurora's SG first via
+`clickpipes_ingress_cidrs` (see step 1). Verified working set (18 Mar 2026):
+`13.215.65.134, 18.139.118.108, 47.130.197.47, 54.251.134.219, 54.254.98.29, 54.255.153.106`.
+
+> Note: ClickPipes lands **three** bookkeeping columns —
+> `_peerdb_synced_at`, `_peerdb_is_deleted`, `_peerdb_version` — so the repoint
+> script (step 4) auto-detects them rather than assuming two.
+
+**Or via the console** —
 ClickHouse Cloud → **Data sources → ClickPipes → Postgres CDC**:
 - **Host/port/db**: from `terraform output` (writer endpoint, 5432, `arena`).
 - **User/password**: `arena_cdc`.
