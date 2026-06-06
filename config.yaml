@@ -1,0 +1,48 @@
+clickhouse:
+  host: ${CLICKHOUSE_CLOUD_HOST}
+  port: 8443
+  secure: true
+  database: ${CLICKHOUSE_CLOUD_DATABASE}
+  admin_user: ${CLICKHOUSE_CLOUD_USER}
+  admin_password: ${CLICKHOUSE_CLOUD_PASSWORD}
+  ro_user: arena_ro
+  ro_password: ${ARENA_RO_PASSWORD}
+  query_limits:
+    max_execution_time: 15
+    max_result_rows: 100000
+    max_memory_usage: 4000000000
+    max_rows_to_read: 200000000
+
+bedrock:
+  region: ap-southeast-1
+  inference:
+    temperature: 0.0
+    maxTokens: 1024
+
+langfuse:
+  host: ${LANGFUSE_BASE_URL}
+  public_key: ${LANGFUSE_PUBLIC_KEY}
+  secret_key: ${LANGFUSE_SECRET_KEY}
+
+eval:
+  float_dp: 4
+  default_max_retries: 1
+  run_tag: "core"
+
+# Start M1-M3 with ONE cheap model. Verify exact IDs/prices for ap-southeast-1.
+models:
+  - id: apac.amazon.nova-lite-v1:0
+    name: nova-lite
+    family: nova
+    price_per_1m_in: 0.06
+    price_per_1m_out: 0.24
+
+prompts:
+  - name: P1_zeroshot
+    self_correct: false
+  - name: P3_dialect
+    self_correct: false
+
+grid:
+  models: ["*"]
+  prompts: ["*"]
