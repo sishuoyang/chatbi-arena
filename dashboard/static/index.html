@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatBI Arena — Leaderboard</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
+    --ink:#e8edf4; --dim:#8b96a8; --accent:#faff00; --good:#3fb950;
+    --bad:#f85149; --warn:#d29922; --blue:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:var(--bg);color:var(--ink)}
+  header{padding:1.6rem 2rem 1rem;border-bottom:1px solid var(--line);
+    display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap}
+  h1{font-size:1.35rem;margin:0;letter-spacing:-.01em}
+  h1 b{color:var(--accent)}
+  .sub{color:var(--dim);font-size:.85rem}
+  .wrap{padding:1.5rem 2rem;max-width:1200px}
+  .controls{display:flex;gap:.6rem;align-items:center;margin-bottom:1.2rem}
+  select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:.45rem .7rem;font:inherit}
+  .mock{color:var(--warn);font-size:.8rem;border:1px solid var(--warn);
+    border-radius:999px;padding:.1rem .6rem;display:none}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:1rem;margin-bottom:1.6rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:1rem 1.1rem}
+  .card .k{color:var(--dim);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+  .card .v{font-size:1.7rem;font-weight:650;margin-top:.25rem}
+  .card .v small{font-size:.9rem;color:var(--dim);font-weight:400}
+  .card.win{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  h2{font-size:.95rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;
+    margin:1.8rem 0 .7rem}
+  table{border-collapse:collapse;width:100%;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:.6rem .8rem;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:var(--panel2);color:var(--dim);font-weight:600;font-size:.8rem;
+    text-transform:uppercase;letter-spacing:.03em;cursor:pointer;user-select:none}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.win td{background:rgba(250,255,0,.06)}
+  .pill{font-size:.72rem;color:var(--bg);background:var(--accent);border-radius:999px;
+    padding:.05rem .5rem;margin-left:.4rem;font-weight:700}
+  .mono{font-variant-numeric:tabular-nums}
+  .bar{height:7px;border-radius:4px;background:var(--line);overflow:hidden;min-width:80px}
+  .bar>i{display:block;height:100%;background:var(--good)}
+  .heat td{font-variant-numeric:tabular-nums}
+  .ob{display:inline-flex;height:10px;border-radius:3px;overflow:hidden;width:140px;background:var(--line)}
+  .ob>span{height:100%}
+  .lgnd{color:var(--dim);font-size:.78rem;margin-top:.4rem}
+  .lgnd i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 .25rem 0 .8rem;vertical-align:middle}
+  footer{color:var(--dim);font-size:.78rem;padding:1rem 2rem 2rem}
+</style></head>
+<body>
+<header>
+  <h1>ChatBI <b>Arena</b></h1>
+  <span class="sub">NL→SQL agent leaderboard · graded by execution accuracy on ClickHouse</span>
+</header>
+<div class="wrap">
+  <div class="controls">
+    <label class="sub">Run</label>
+    <select id="run"></select>
+    <span class="mock" id="mockTag">synthetic data — pending Bedrock access</span>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <h2>Leaderboard — sorted by accuracy, then cost per correct</h2>
+  <table id="lb"><thead><tr>
+    <th data-k="config_id">Config</th>
+    <th data-k="n_questions"># Q</th>
+    <th data-k="accuracy">Accuracy</th>
+    <th data-k="n_correct">Correct</th>
+    <th data-k="total_cost_usd">Total $</th>
+    <th data-k="avg_latency_ms">Avg latency</th>
+    <th data-k="cost_per_correct_answer">$ / correct</th>
+  </tr></thead><tbody></tbody></table>
+
+  <h2>Accuracy by difficulty tier</h2>
+  <table id="tiers" class="heat"><thead></thead><tbody></tbody></table>
+
+  <h2>Outcome breakdown</h2>
+  <div id="outcomes"></div>
+  <div class="lgnd" id="obLegend"></div>
+</div>
+<footer>Source of truth: <span class="mono">arena_house.eval_runs</span> in ClickHouse Cloud (AWS) ·
+  rich traces in LangFuse Cloud</footer>
+
+<script>
+const OB_COLORS={correct:'var(--good)',wrong_result:'var(--bad)',
+  sql_exec_error:'var(--warn)',sql_policy_rejected:'#a371f7',
+  empty_but_expected:'#58a6ff',timeout:'#8b96a8'};
+const j=async u=>(await fetch(u)).json();
+const pct=v=>(v*100).toFixed(1)+'%';
+const money=v=>v==null?'—':'$'+Number(v).toFixed(5);
+
+let sortKey='accuracy', sortDir=-1;
+
+async function loadCards(run){
+  const rows=await j('/api/leaderboard?run_id='+run);
+  const best=rows[0]||{};
+  const totalQ=rows.reduce((s,r)=>s+Number(r.n_questions),0);
+  const el=document.getElementById('cards');
+  el.innerHTML=`
+    <div class="card win"><div class="k">Winner</div>
+      <div class="v">${best.config_id||'—'}</div></div>
+    <div class="card"><div class="k">Best accuracy</div>
+      <div class="v mono">${best.accuracy!=null?pct(best.accuracy):'—'}</div></div>
+    <div class="card"><div class="k">Cost / correct (winner)</div>
+      <div class="v mono">${money(best.cost_per_correct_answer)}</div></div>
+    <div class="card"><div class="k">Configs × answers</div>
+      <div class="v mono">${rows.length} <small>× ${totalQ} graded</small></div></div>`;
+}
+
+async function loadBoard(run){
+  const rows=await j('/api/leaderboard?run_id='+run);
+  rows.sort((a,b)=>(a[sortKey]>b[sortKey]?1:-1)*sortDir);
+  const best=Math.max(...rows.map(r=>Number(r.accuracy)),0);
+  const tb=document.querySelector('#lb tbody'); tb.innerHTML='';
+  for(const r of rows){
+    const isWin=Number(r.accuracy)===best;
+    const tr=document.createElement('tr'); if(isWin)tr.className='win';
+    tr.innerHTML=`<td>${r.config_id}${isWin?'<span class="pill">WIN</span>':''}</td>
+      <td class="mono">${r.n_questions}</td>
+      <td class="mono">${pct(r.accuracy)}</td>
+      <td class="mono">${r.n_correct}</td>
+      <td class="mono">$${Number(r.total_cost_usd).toFixed(5)}</td>
+      <td class="mono">${Math.round(r.avg_latency_ms)} ms</td>
+      <td class="mono">${money(r.cost_per_correct_answer)}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function loadTiers(run){
+  const rows=await j('/api/tiers?run_id='+run);
+  const configs=[...new Set(rows.map(r=>r.config_id))];
+  const tiers=[...new Set(rows.map(r=>r.tier))].sort();
+  const map={}; rows.forEach(r=>map[r.config_id+'|'+r.tier]=r.accuracy);
+  const th=document.querySelector('#tiers thead');
+  th.innerHTML='<tr><th>Config</th>'+tiers.map(t=>`<th>Tier ${t}</th>`).join('')+'</tr>';
+  const tb=document.querySelector('#tiers tbody'); tb.innerHTML='';
+  for(const c of configs){
+    let row=`<td>${c}</td>`;
+    for(const t of tiers){
+      const a=map[c+'|'+t];
+      const bg=a==null?'transparent':`rgba(63,185,80,${0.15+0.6*a})`;
+      row+=`<td style="background:${bg}">${a==null?'—':pct(a)}</td>`;
+    }
+    tb.insertAdjacentHTML('beforeend',`<tr>${row}</tr>`);
+  }
+}
+
+async function loadOutcomes(run){
+  const rows=await j('/api/outcomes?run_id='+run);
+  const byCfg={}; const kinds=new Set();
+  rows.forEach(r=>{(byCfg[r.config_id]=byCfg[r.config_id]||{})[r.outcome]=Number(r.n);kinds.add(r.outcome);});
+  const el=document.getElementById('outcomes'); el.innerHTML='';
+  for(const c of Object.keys(byCfg)){
+    const tot=Object.values(byCfg[c]).reduce((a,b)=>a+b,0);
+    let seg='';
+    for(const k of Object.keys(byCfg[c]))
+      seg+=`<span style="width:${100*byCfg[c][k]/tot}%;background:${OB_COLORS[k]||'#888'}"></span>`;
+    el.insertAdjacentHTML('beforeend',
+      `<div style="display:flex;align-items:center;gap:.8rem;margin:.35rem 0">
+        <span style="width:230px">${c}</span><span class="ob">${seg}</span></div>`);
+  }
+  document.getElementById('obLegend').innerHTML=[...kinds]
+    .map(k=>`<i style="background:${OB_COLORS[k]||'#888'}"></i>${k}`).join('');
+}
+
+document.querySelectorAll('#lb thead th').forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; sortDir=(k===sortKey)?-sortDir:-1; sortKey=k;
+  loadBoard(document.getElementById('run').value);
+});
+
+async function loadAll(run){
+  document.getElementById('mockTag').style.display=run.startsWith('mock')?'inline-block':'none';
+  await Promise.all([loadCards(run),loadBoard(run),loadTiers(run),loadOutcomes(run)]);
+}
+
+(async()=>{
+  const runs=await j('/api/runs'); const sel=document.getElementById('run');
+  sel.innerHTML=runs.map(r=>`<option>${r}</option>`).join('');
+  sel.onchange=()=>loadAll(sel.value);
+  if(runs.length)loadAll(runs[0]);
+})();
+</script>
+</body></html>
