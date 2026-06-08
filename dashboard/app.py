@@ -3,10 +3,15 @@ Usage: source .env && uvicorn dashboard.app:app --reload --port 8000
 """
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from arena.config import load_config
 from agents.chclient import make_admin_client
 
 app = FastAPI(title="ChatBI Arena Leaderboard")
+# Allow the React SPA (Vite dev server / static build) to call this JSON API.
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"],
+)
 _cfg = load_config()
 _db = _cfg.clickhouse.database
 

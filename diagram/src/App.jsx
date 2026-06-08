@@ -1,86 +1,33 @@
-import { useMemo } from 'react'
-import {
-  ReactFlow, Background, Controls, MiniMap, Panel, MarkerType,
-  useNodesState, useEdgesState,
-} from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
+import { useState } from 'react'
+import FlowDiagram from './diagram/FlowDiagram.jsx'
+import Leaderboard from './leaderboard/Leaderboard.jsx'
 
-import { componentNodes, edges as rawEdges, EDGE_COLORS, ENV } from './graph.js'
-import { layoutLR } from './layout.js'
-import CardNode from './nodes/CardNode.jsx'
-import AnimatedFlowEdge from './edges/AnimatedFlowEdge.jsx'
-
-const nodeTypes = { card: CardNode }
-const edgeTypes = { flow: AnimatedFlowEdge }
-
-const FLOW_LEGEND = [
-  ['OLTP + CDC data', EDGE_COLORS.data],
-  ['Bedrock inference', EDGE_COLORS.ai],
-  ['read-only query', EDGE_COLORS.read],
-  ['orchestration', EDGE_COLORS.control],
-  ['LangFuse traces', EDGE_COLORS.trace],
-  ['OTel telemetry', EDGE_COLORS.telemetry],
+const TABS = [
+  ['architecture', 'Architecture'],
+  ['leaderboard', 'Leaderboard'],
 ]
 
 export default function App() {
-  const initialNodes = useMemo(() => layoutLR(componentNodes, rawEdges), [])
-  const initialEdges = useMemo(
-    () => rawEdges.map((e) => ({
-      ...e,
-      markerEnd: { type: MarkerType.ArrowClosed, color: e.data.color, width: 15, height: 15 },
-    })),
-    [],
-  )
-
-  // Controlled state + change handlers => nodes are draggable and the drag sticks.
-  const [nodes, , onNodesChange] = useNodesState(initialNodes)
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
-
+  const [tab, setTab] = useState('architecture')
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0e1116' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.1 }}
-        minZoom={0.2}
-        proOptions={{ hideAttribution: true }}
-        nodesDraggable
-        elevateEdgesOnSelect
-      >
-        <Background color="#1c2230" gap={26} size={1.5} />
-        <Controls showInteractive={false} />
-        <MiniMap pannable zoomable nodeColor={(n) => n.data?.accent || '#888'}
-          maskColor="rgba(14,17,22,0.7)" style={{ background: '#161b22' }} />
-
-        <Panel position="top-left" className="title-panel">
-          <div className="title-main">ChatBI&nbsp;<b>Arena</b> — architecture &amp; data flow</div>
-          <div className="title-sub">
-            NL→SQL agent benchmark · Aurora→ClickPipes CDC→ClickHouse · Bedrock · LangFuse · ClickStack
-          </div>
-        </Panel>
-
-        <Panel position="top-right" className="legend-panel">
-          <div className="legend-head">Runs on</div>
-          {Object.values(ENV).map((envv) => (
-            <div key={envv.label} className="legend-row">
-              <span className="legend-dot" style={{ background: envv.color }} />
-              {envv.label}
-            </div>
+    <div className="app-shell">
+      <header className="app-bar">
+        <div className="brand">ChatBI&nbsp;<b>Arena</b></div>
+        <nav className="tabs">
+          {TABS.map(([id, label]) => (
+            <button key={id} className={tab === id ? 'tab active' : 'tab'}
+              onClick={() => setTab(id)}>{label}</button>
           ))}
-          <div className="legend-head" style={{ marginTop: 8 }}>Flow type</div>
-          {FLOW_LEGEND.map(([label, color]) => (
-            <div key={label} className="legend-row">
-              <span className="legend-swatch" style={{ background: color }} />
-              {label}
-            </div>
-          ))}
-        </Panel>
-      </ReactFlow>
+        </nav>
+        <div className="app-sub">NL→SQL agent benchmark on ClickHouse</div>
+      </header>
+      <main className="app-body">
+        {/* keep the diagram mounted to preserve drag positions when switching tabs */}
+        <div style={{ display: tab === 'architecture' ? 'block' : 'none', height: '100%' }}>
+          <FlowDiagram />
+        </div>
+        {tab === 'leaderboard' && <Leaderboard />}
+      </main>
     </div>
   )
 }

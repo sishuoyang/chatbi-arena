@@ -1,56 +1,50 @@
-# ChatBI Arena — Architecture Data-Flow Diagram
+# ChatBI Arena — Web UI (Architecture + Leaderboard)
 
-An animated [React Flow](https://reactflow.dev) (`@xyflow/react`) diagram of the
-whole ChatBI Arena architecture. Packets travel along each edge to show the
-direction of data flow; edge colors group the flow types and node colors show
-where each component runs (legend top-right).
+A single [React](https://react.dev) ([Vite](https://vite.dev)) SPA with two tabs:
 
-Layout is computed automatically by **dagre** (layered left→right with
-crossing minimization) and edges use **orthogonal smoothstep routing**, so the
-lanes stay readable. Components are color-coded by environment rather than boxed
-into zones, which frees the layout to minimize edge crossings.
+- **Architecture** — an animated [React Flow](https://reactflow.dev) (`@xyflow/react`)
+  data-flow diagram of the whole system. Packets travel along each edge to show
+  flow direction; edge colors group flow types, node colors show where each
+  component runs (legend top-right). Nodes are draggable; drag the canvas to pan,
+  scroll to zoom.
+- **Leaderboard** — the benchmark results, fetched live from the FastAPI
+  dashboard API (`dashboard/app.py`) which reads the `arena.eval_runs` /
+  `v_leaderboard` tables in ClickHouse. Run selector, winner cards, sortable
+  leaderboard, per-tier accuracy heatmap, and outcome breakdown.
 
-![preview](preview.png)
+![architecture tab](preview.png)
+![leaderboard tab](preview-leaderboard.png)
 
-**Interactive:** drag any node to rearrange (the drag sticks), drag the canvas to
-pan, scroll to zoom, and use the controls / minimap (bottom-left / bottom-right).
+Diagram layout is computed by **dagre** (layered left→right with crossing
+minimization); edges use orthogonal smoothstep routing.
 
 ## Run
 
 ```bash
 cd diagram
 npm install
-npm run dev      # → http://localhost:5174   (live, animated)
-# or a static build:
-npm run build && npm run preview
+npm run dev            # → http://localhost:5174  (both tabs)
 ```
 
-## What it shows (accurate to the implementation)
+The **Leaderboard tab** needs the dashboard API running (the Architecture tab
+needs nothing):
 
-**Zones** = where each component runs:
-- **Local / Docker** — data generator, benchmark harness, agent core (loop · P1–P5 · SQL guard), serving API, leaderboard dashboard, OTel collector, golden set.
-- **AWS ap-southeast-1** — Aurora PostgreSQL (OLTP source), Amazon Bedrock (Converse).
-- **ClickHouse Cloud (AWS ap-southeast-1)** — `arena_cdc` ReplacingMergeTree tables, `v_*` FINAL views, `eval_runs` + `v_leaderboard`, `otel_*`/ClickStack tables.
-- **SaaS** — LangFuse Cloud.
+```bash
+# from the repo root, in another shell:
+source .env && uvicorn dashboard.app:app --port 8000
+```
 
-**Edges** (each a labeled, animated flow):
-| Flow | Type |
-|---|---|
-| data generator → Aurora (INSERT + status UPDATEs) | OLTP data |
-| Aurora → `arena_cdc` (ClickPipes CDC, logical replication) | data |
-| `arena_cdc` → `v_*` views (FINAL dedup) | data |
-| agent core → Bedrock (Converse NL→SQL + tokens) | AI inference |
-| agent core → `v_*` views (read-only sandboxed SELECT) | read query |
-| golden set → harness; harness → agent (grid: model × prompt) | orchestration |
-| analyst → serving API (POST /ask); serving → agent (reuses core) | orchestration |
-| harness → `eval_runs` (grade by execution accuracy → write) | data |
-| harness → LangFuse (traces + scores) | trace |
-| `eval_runs`/`v_leaderboard` → dashboard (read) | read query |
-| data generator + serving → OTel collector (OTLP) → `otel_*` | telemetry |
+The UI calls `http://localhost:8000` by default; override with
+`VITE_API_BASE=http://host:8000 npm run dev`. The API has CORS enabled for the SPA.
 
 ## Files
-- `src/graph.js` — the architecture model (component nodes + edges, with env colors). Edit here to change the diagram.
-- `src/layout.js` — dagre layered LR auto-layout (crossing minimization).
-- `src/nodes/CardNode.jsx` — node renderer (4-sided handles).
-- `src/edges/AnimatedFlowEdge.jsx` — animated orthogonal flow edge (moving packet + dashes).
-- `src/App.jsx` — React Flow canvas, legends, minimap.
+- `src/App.jsx` — tab shell (Architecture / Leaderboard).
+- `src/api.js` — dashboard API base + fetch helper (`VITE_API_BASE`).
+- `src/diagram/graph.js` — architecture model (nodes + edges, env colors). Edit here to change the diagram.
+- `src/diagram/layout.js` — dagre layered LR auto-layout.
+- `src/diagram/FlowDiagram.jsx` — React Flow canvas + legends + minimap.
+- `src/diagram/nodes/CardNode.jsx`, `src/diagram/edges/AnimatedFlowEdge.jsx` — renderers.
+- `src/leaderboard/Leaderboard.jsx` — leaderboard UI (fetches the FastAPI API).
+
+> The standalone vanilla dashboard (`dashboard/static/index.html`) still works
+> too; this React Leaderboard tab is a port of it sharing the same API.
