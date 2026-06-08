@@ -1,13 +1,13 @@
-"""Leaderboard dashboard. Reads ONLY from ClickHouse (single source of truth).
+"""Leaderboard JSON API. Reads ONLY from ClickHouse (single source of truth).
+Consumed by the React web UI (../web, Leaderboard tab).
 Usage: source .env && uvicorn dashboard.app:app --reload --port 8000
 """
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from arena.config import load_config
 from agents.chclient import make_admin_client
 
-app = FastAPI(title="ChatBI Arena Leaderboard")
+app = FastAPI(title="ChatBI Arena Leaderboard API")
 # Allow the React SPA (Vite dev server / static build) to call this JSON API.
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"],
@@ -65,8 +65,3 @@ def outcomes(run_id: str | None = None):
         f"FROM (SELECT * FROM {_db}.eval_runs FINAL) {where} "
         f"GROUP BY config_id, outcome ORDER BY config_id")
     return _rows_to_dicts(res)
-
-
-@app.get("/")
-def index():
-    return FileResponse("dashboard/static/index.html")

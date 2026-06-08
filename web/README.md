@@ -46,5 +46,6 @@ The UI calls `http://localhost:8000` by default; override with
 - `src/diagram/nodes/CardNode.jsx`, `src/diagram/edges/AnimatedFlowEdge.jsx` — renderers.
 - `src/leaderboard/Leaderboard.jsx` — leaderboard UI (fetches the FastAPI API).
 
-> The standalone vanilla dashboard (`dashboard/static/index.html`) still works
-> too; this React Leaderboard tab is a port of it sharing the same API.
+> The leaderboard data comes from `dashboard/app.py` (a FastAPI JSON API over
+> ClickHouse). This React UI is the only front-end — the old static dashboard
+> page was removed.

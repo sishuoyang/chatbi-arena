@@ -16,7 +16,7 @@ leaderboard is rendered from a ClickHouse results table (the single source of tr
 
 - **Cloud:** ClickHouse Cloud on AWS `ap-southeast-1` · AWS Bedrock (Converse API) ·
   LangFuse Cloud · (later) Aurora + ClickPipes CDC + managed ClickStack.
-- **Local:** data generator, benchmark harness, dashboard.
+- **Local:** data generator, benchmark harness, dashboard API, web UI.
 - **Stable contract:** the `v_*` views. Today they sit over seed tables loaded directly;
   later they repoint at ClickPipes CDC tables — agents never notice.
 - **Read-only safety:** agent SQL runs as a `readonly=1` ClickHouse user with server-side
@@ -56,8 +56,14 @@ python -m datagen.generator --seed 42     # seed ~90 days of e-commerce data
 python schema/gen_schema_context.py       # apply v_* views + write schema_context.md
 pytest -q                                 # 32 unit tests (grading, sqlguard, config, ...)
 AWS_PROFILE=sa python -m eval.harness     # run the grid against real Bedrock
+```
 
-uvicorn dashboard.app:app --port 8000     # → http://localhost:8000
+### Web UI (Architecture diagram + Leaderboard)
+A single React SPA in `web/` with two tabs. The Leaderboard tab reads from the
+FastAPI JSON API (`dashboard/app.py`); the Architecture tab needs nothing.
+```bash
+uvicorn dashboard.app:app --port 8000     # JSON API for the Leaderboard tab
+cd web && npm install && npm run dev      # → http://localhost:5174  (both tabs)
 ```
 
 ### Observability (ClickStack) + live serving
@@ -78,8 +84,8 @@ See `infra/README_clickpipes.md`: `terraform apply` Aurora, seed it
 (`--target aurora`), create the ClickPipes pipe, then `schema/repoint_views.py`
 swaps `v_*` onto the CDC tables — agents/leaderboard unchanged.
 
-If Bedrock access is unavailable, populate the dashboard with a clearly-labeled
-synthetic run to validate the full pipeline (the dashboard badges it as synthetic):
+If Bedrock access is unavailable, populate the leaderboard with a clearly-labeled
+synthetic run to validate the full pipeline (the UI badges it as synthetic):
 
 ```bash
 python scripts/seed_mock_results.py       # writes a mock-* run to eval_runs
@@ -95,8 +101,10 @@ python scripts/seed_mock_results.py       # writes a mock-* run to eval_runs
 | `datagen/generator.py` | synthetic e-commerce → ClickHouse seed tables |
 | `schema/` | seed tables, `v_*` views, generated schema context |
 | `golden/questions.yaml` | 20 golden questions across 5 difficulty tiers |
-| `dashboard/` | FastAPI + static leaderboard (reads ClickHouse only) |
-| `scripts/` | connectivity check, ClickHouse setup, mock results |
+| `dashboard/app.py` | FastAPI JSON API for the leaderboard (reads ClickHouse only) |
+| `web/` | React SPA — Architecture diagram + Leaderboard tabs (Vite + React Flow) |
+| `scripts/` | connectivity check, ClickHouse setup, mock results, `arena.sh` lifecycle |
+| `infra/terraform/` | Aurora + CDC IaC; `infra/README_clickpipes.md` runbook |
 | `docs/superpowers/` | design spec + implementation plan |
 
 ## Docs
