@@ -5,8 +5,9 @@ A single [React](https://react.dev) ([Vite](https://vite.dev)) SPA with two tabs
 - **Architecture** — an animated [React Flow](https://reactflow.dev) (`@xyflow/react`)
   data-flow diagram of the whole system. Packets travel along each edge to show
   flow direction; edge colors group flow types, node colors show where each
-  component runs (legend top-right). Nodes are draggable; drag the canvas to pan,
-  scroll to zoom.
+  component runs (legend top-right). Edge labels are short so they don't cover the
+  arrows — **hover an edge label** to see the full description. Nodes are
+  draggable; drag the canvas to pan, scroll to zoom.
 - **Leaderboard** — the benchmark results, fetched live from the FastAPI
   dashboard API (`dashboard/app.py`) which reads the `arena.eval_runs` /
   `v_leaderboard` tables in ClickHouse. Run selector, winner cards, sortable

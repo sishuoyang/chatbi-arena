@@ -45,30 +45,31 @@ export const componentNodes = [
 ]
 
 // All edges flow forward in the dagre LR ranking, so source=right, target=left.
-const e = (id, source, target, label, color) => ({
+// label = short (always shown); detail = full text (shown on hover).
+const e = (id, source, target, label, detail, color) => ({
   id, source, target, label, type: 'flow',
   sourceHandle: 's-right', targetHandle: 't-left',
-  data: { color: EDGE_COLORS[color] },
+  data: { color: EDGE_COLORS[color], detail },
 })
 
 export const edges = [
-  e('datagen-aurora', 'datagen', 'aurora', 'INSERT + status UPDATEs', 'data'),
-  e('aurora-cdc', 'aurora', 'cdc', 'ClickPipes CDC · logical replication', 'data'),
-  e('cdc-views', 'cdc', 'views', 'FINAL dedup', 'data'),
+  e('datagen-aurora', 'datagen', 'aurora', 'write', 'INSERT + status UPDATEs', 'data'),
+  e('aurora-cdc', 'aurora', 'cdc', 'CDC', 'ClickPipes CDC · logical replication', 'data'),
+  e('cdc-views', 'cdc', 'views', 'FINAL', 'FINAL dedup → current state', 'data'),
 
-  e('agent-bedrock', 'agent', 'bedrock', 'Converse (NL→SQL) + tokens', 'ai'),
-  e('agent-views', 'agent', 'views', 'read-only SELECT (sandboxed)', 'read'),
-  e('evalruns-dashboard', 'evalruns', 'dashboard', 'leaderboard (read)', 'read'),
+  e('agent-bedrock', 'agent', 'bedrock', 'Converse', 'Bedrock Converse: NL→SQL + token usage', 'ai'),
+  e('agent-views', 'agent', 'views', 'SELECT', 'read-only SELECT (sandboxed)', 'read'),
+  e('evalruns-dashboard', 'evalruns', 'dashboard', 'read', 'leaderboard read', 'read'),
 
-  e('golden-harness', 'golden', 'harness', 'questions + golden SQL', 'control'),
-  e('harness-agent', 'harness', 'agent', 'run grid: model × prompt', 'control'),
-  e('user-serving', 'user', 'serving', 'POST /ask', 'control'),
-  e('serving-agent', 'serving', 'agent', 'reuses agent core', 'control'),
+  e('golden-harness', 'golden', 'harness', 'Qs', 'questions + golden SQL', 'control'),
+  e('harness-agent', 'harness', 'agent', 'run', 'run grid: model × prompt', 'control'),
+  e('user-serving', 'user', 'serving', '/ask', 'POST /ask', 'control'),
+  e('serving-agent', 'serving', 'agent', 'reuse', 'reuses the agent core', 'control'),
 
-  e('harness-evalruns', 'harness', 'evalruns', 'grade (exec accuracy) → write', 'data'),
-  e('harness-langfuse', 'harness', 'langfuse', 'traces + scores', 'trace'),
+  e('harness-evalruns', 'harness', 'evalruns', 'grade', 'grade by execution accuracy → write', 'data'),
+  e('harness-langfuse', 'harness', 'langfuse', 'trace', 'traces + correctness/cost/latency scores', 'trace'),
 
-  e('datagen-collector', 'datagen', 'collector', 'OTLP', 'telemetry'),
-  e('serving-collector', 'serving', 'collector', 'OTLP', 'telemetry'),
-  e('collector-otel', 'collector', 'otel', 'write telemetry', 'telemetry'),
+  e('datagen-collector', 'datagen', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
+  e('serving-collector', 'serving', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
+  e('collector-otel', 'collector', 'otel', 'write', 'write telemetry tables', 'telemetry'),
 ]

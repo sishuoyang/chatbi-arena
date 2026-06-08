@@ -33,6 +33,7 @@ export default function AnimatedFlowEdge({
             }}
           >
             {label}
+            {data?.detail && <span className="edge-tip">{data.detail}</span>}
           </div>
         </EdgeLabelRenderer>
       )}
