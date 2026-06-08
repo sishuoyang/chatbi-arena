@@ -28,6 +28,7 @@ export default function Leaderboard() {
   const [outcomes, setOutcomes] = useState([])
   const [meta, setMeta] = useState({})
   const [sort, setSort] = useState({ key: 'accuracy', dir: -1 })
+  const [promptFilter, setPromptFilter] = useState('All')
   const [error, setError] = useState(null)
 
   const [expanded, setExpanded] = useState(() => new Set())  // config_ids expanded simultaneously
@@ -78,19 +79,27 @@ export default function Leaderboard() {
 
   useEffect(() => {
     if (!run) return
-    setExpanded(new Set()); setConv(null); setDetails({})
+    setExpanded(new Set()); setConv(null); setDetails({}); setPromptFilter('All')
     loadBoard(run)
   }, [run])
 
+  // prompt filter (e.g. compare only zero-shot, or only few-shot, across models)
+  const promptsInRun = useMemo(() => [...new Set(board.map((r) => r.prompt_name))].sort(), [board])
+  const promptDesc = useMemo(() => Object.fromEntries(prompts.map((p) => [p.name, p.desc])), [prompts])
+  const matchP = (cid) => promptFilter === 'All' || (cid || '').split('__').pop() === promptFilter
+  const fboard = useMemo(
+    () => (promptFilter === 'All' ? board : board.filter((r) => r.prompt_name === promptFilter)),
+    [board, promptFilter])
+
   const sortedBoard = useMemo(() => {
-    const rows = [...board]
+    const rows = [...fboard]
     rows.sort((a, b) => (a[sort.key] > b[sort.key] ? 1 : -1) * sort.dir)
     return rows
-  }, [board, sort])
+  }, [fboard, sort])
 
-  const best = Math.max(...board.map((r) => Number(r.accuracy)), 0)
-  const winner = board.find((r) => Number(r.accuracy) === best) || {}
-  const totalGraded = board.reduce((s, r) => s + Number(r.n_questions), 0)
+  const best = Math.max(...fboard.map((r) => Number(r.accuracy)), 0)
+  const winner = fboard.find((r) => Number(r.accuracy) === best) || {}
+  const totalGraded = fboard.reduce((s, r) => s + Number(r.n_questions), 0)
   const lfBase = meta.langfuse_base
   const sessionUrl = (cfg) => lfBase && `${lfBase}/sessions/${encodeURIComponent(run + '__' + cfg)}`
   const toggleSort = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))
@@ -264,6 +273,17 @@ export default function Leaderboard() {
         <div className="lb-card"><div className="k">Configs × answers</div><div className="v mono">{board.length} <small>× {totalGraded}</small></div></div>
       </div>
 
+      {promptsInRun.length > 1 && (
+        <div className="lb-pfilter">
+          <span className="lb-dim">Prompt:</span>
+          <button className={promptFilter === 'All' ? 'fam on' : 'fam'} onClick={() => setPromptFilter('All')}>All</button>
+          {promptsInRun.map((p) => (
+            <button key={p} className={promptFilter === p ? 'fam on' : 'fam'}
+              onClick={() => setPromptFilter(p)}
+              data-tooltip-id="tip" data-tooltip-content={promptDesc[p] || p}>{p}</button>
+          ))}
+        </div>
+      )}
       <h2>Leaderboard — click a row to drill into per-question LangFuse traces</h2>
       <table className="lb-table">
         <thead><tr>
@@ -343,9 +363,9 @@ export default function Leaderboard() {
       </table>
 
       <h2>Accuracy by difficulty tier</h2>
-      <TierHeat tiers={tiers} />
+      <TierHeat tiers={tiers.filter((t) => matchP(t.config_id))} />
       <h2>Outcome breakdown</h2>
-      <Outcomes outcomes={outcomes} />
+      <Outcomes outcomes={outcomes.filter((o) => matchP(o.config_id))} />
     </div>
   )
 }
