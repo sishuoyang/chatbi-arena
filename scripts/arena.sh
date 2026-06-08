@@ -16,6 +16,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export AWS_PROFILE="${AWS_PROFILE:-sa}"
+# Put the repo root on sys.path so file-path scripts (scripts/*.py, schema/*.py)
+# can `import arena` / `agents` / `eval`, not just the `-m` / `-c` invocations.
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="$ROOT/.venv/bin/python"
 TF="terraform -chdir=$ROOT/infra/terraform"
 CP_IPS='["13.215.65.134/32","18.139.118.108/32","47.130.197.47/32","54.251.134.219/32","54.254.98.29/32","54.255.153.106/32"]'
