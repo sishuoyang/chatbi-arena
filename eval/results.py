@@ -40,13 +40,14 @@ ORDER BY (run_id, config_id, question_id)
 """
 
 # Idempotently add the newer columns to a pre-existing eval_runs table.
-_MIGRATIONS = [
-    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS judge_score Float64 DEFAULT 0",
-    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS trace_id String DEFAULT ''",
-    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS session_id String DEFAULT ''",
-    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS trace_url String DEFAULT ''",
-    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS session_url String DEFAULT ''",
-]
+# Columns added after the original schema; applied only when actually missing.
+_NEW_COLUMNS = {
+    "judge_score": "Float64 DEFAULT 0",
+    "trace_id": "String DEFAULT ''",
+    "session_id": "String DEFAULT ''",
+    "trace_url": "String DEFAULT ''",
+    "session_url": "String DEFAULT ''",
+}
 
 _LEADERBOARD = """
 CREATE OR REPLACE VIEW {db}.v_leaderboard AS
@@ -64,11 +65,33 @@ GROUP BY run_id, config_id, model_name, prompt_name
 """
 
 
+def _command_retry(admin, sql: str, tries: int = 6) -> None:
+    """Run DDL, retrying ClickHouse Cloud's transient replica-metadata race
+    (code 517 CANNOT_ASSIGN_ALTER — 'please retry')."""
+    import time
+    for i in range(tries):
+        try:
+            admin.command(sql)
+            return
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if ("517" in msg or "CANNOT_ASSIGN_ALTER" in msg) and i < tries - 1:
+                time.sleep(1.0 * (i + 1))
+                continue
+            raise
+
+
 def ensure_results_tables(admin, db: str) -> None:
-    admin.command(_DDL.format(db=db))
-    for m in _MIGRATIONS:
-        admin.command(m.format(db=db))
-    admin.command(_LEADERBOARD.format(db=db))
+    _command_retry(admin, _DDL.format(db=db))
+    # Only ALTER columns that are actually missing — so a migrated table issues
+    # no ALTER at all (avoids re-triggering the replicated-DDL metadata race).
+    existing = {r[0] for r in admin.query(
+        f"SELECT name FROM system.columns WHERE database = '{db}' AND table = 'eval_runs'"
+    ).result_rows}
+    for col, typ in _NEW_COLUMNS.items():
+        if col not in existing:
+            _command_retry(admin, f"ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS {col} {typ}")
+    _command_retry(admin, _LEADERBOARD.format(db=db))
 
 
 def write_eval_run(admin, db: str, row: EvalRunRow) -> None:
