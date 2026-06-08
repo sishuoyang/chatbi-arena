@@ -5,6 +5,8 @@
 #   scripts/arena.sh up --seed-only   measurement core only (ClickHouse seed, no AWS)
 #   scripts/arena.sh down             tear down billable infra (pipe + Aurora) + collector
 #   scripts/arena.sh down --purge     also drop ClickHouse arena_cdc/arena_house + RO user
+#   scripts/arena.sh serve            (re)start just the dashboard API + web UI
+#   scripts/arena.sh stop             stop just the local servers (leave infra up)
 #   scripts/arena.sh status           show what's running
 #
 # Requires: .venv (deps installed), .env (CLICKHOUSE_*, LANGFUSE_*, CH_CLOUD_*,
@@ -17,9 +19,37 @@ export AWS_PROFILE="${AWS_PROFILE:-sa}"
 PY="$ROOT/.venv/bin/python"
 TF="terraform -chdir=$ROOT/infra/terraform"
 CP_IPS='["13.215.65.134/32","18.139.118.108/32","47.130.197.47/32","54.251.134.219/32","54.254.98.29/32","54.255.153.106/32"]'
+RUN_DIR="$ROOT/.run"
 
 log() { printf '\n\033[1;33m▶ %s\033[0m\n' "$*"; }
 load_env() { set -a; . ./.env; set +a; }
+
+# Start the dashboard JSON API (:8000) + the React web UI (:5174) in the
+# background; logs in .run/. Idempotent (kills prior instances first).
+start_servers() {
+  mkdir -p "$RUN_DIR"
+  log "Starting dashboard API (:8000) + web UI (:5174)"
+  pkill -f "uvicorn dashboard.app" 2>/dev/null || true
+  pkill -f "vite" 2>/dev/null || true
+  ( cd "$ROOT" && PYTHONPATH="$ROOT" nohup "$PY" -m uvicorn dashboard.app:app \
+      --port 8000 --log-level warning >"$RUN_DIR/dashboard-api.log" 2>&1 & )
+  [ -d "$ROOT/web/node_modules" ] || ( cd "$ROOT/web" && npm install )
+  ( cd "$ROOT/web" && nohup npm run dev -- --port 5174 >"$RUN_DIR/web.log" 2>&1 & )
+
+  # -fs => only a real 2xx counts (a foreign app 404ing on the port is NOT "up").
+  local ok_api=0 ok_web=0 i
+  for i in $(seq 1 30); do curl -fs -o /dev/null localhost:8000/api/runs && { ok_api=1; break; }; sleep 1; done
+  for i in $(seq 1 45); do curl -fs -o /dev/null localhost:5174 && { ok_web=1; break; }; sleep 1; done
+  echo "  dashboard API : http://localhost:8000  [$([ $ok_api = 1 ] && echo ready || echo 'NOT up')]  (.run/dashboard-api.log)"
+  echo "  web UI        : http://localhost:5174  [$([ $ok_web = 1 ] && echo ready || echo 'NOT up')]  (.run/web.log)"
+  [ $ok_api = 1 ] || echo "  ⚠ dashboard API didn't come up — is port 8000 already in use? check .run/dashboard-api.log"
+}
+
+stop_servers() {
+  pkill -f "uvicorn dashboard.app" 2>/dev/null || true
+  pkill -f "uvicorn serving.api" 2>/dev/null || true
+  pkill -f "vite" 2>/dev/null || true
+}
 
 require_venv() { [ -x "$PY" ] || { echo "missing .venv — python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 1; }; }
 require_aws() {
@@ -56,10 +86,12 @@ up_full() {
   log "Starting ClickStack OTel collector"
   docker compose up -d
 
+  start_servers
+
   log "UP complete (full CDC stack)."
-  echo "  Run grid:   AWS_PROFILE=$AWS_PROFILE $PY -m eval.harness --run-id grid-cdc"
-  echo "  Dashboard:  $PY -m uvicorn dashboard.app:app --port 8000"
-  echo "  Serving:    AWS_PROFILE=$AWS_PROFILE $PY -m uvicorn serving.api:app --port 8100"
+  echo "  Open:    http://localhost:5174  (Architecture + Leaderboard tabs)"
+  echo "  Grid:    AWS_PROFILE=$AWS_PROFILE $PY -m eval.harness --run-id grid-cdc   # populates the Leaderboard"
+  echo "  Serving: AWS_PROFILE=$AWS_PROFILE $PY -m uvicorn serving.api:app --port 8100   # optional /ask"
 }
 
 up_seed_only() {
@@ -72,14 +104,15 @@ up_seed_only() {
   $PY schema/gen_schema_context.py
   log "Starting ClickStack OTel collector"
   docker compose up -d
+  start_servers
   log "UP complete (seed-only measurement core)."
+  echo "  Open: http://localhost:5174  (run the harness to populate the Leaderboard)"
 }
 
 down() {
   require_venv; load_env
-  log "Stopping local servers (dashboard / serving)"
-  pkill -f "uvicorn dashboard.app" 2>/dev/null || true
-  pkill -f "uvicorn serving.api" 2>/dev/null || true
+  log "Stopping local servers (web UI + dashboard/serving API)"
+  stop_servers
 
   log "Stopping ClickStack collector"
   docker compose down 2>/dev/null || true
@@ -117,6 +150,9 @@ status() {
   aws sts get-caller-identity >/dev/null 2>&1 && $PY scripts/create_clickpipe.py --action status || echo "  (AWS session invalid)"
   log "ClickStack collector"
   docker ps --filter name=arena-clickstack-collector --format '  {{.Names}} {{.Status}}' || true
+  log "Web / API servers"
+  curl -fs -o /dev/null localhost:8000/api/runs && echo "  dashboard API :8000  up" || echo "  dashboard API :8000  down"
+  curl -fs -o /dev/null localhost:5174 && echo "  web UI        :5174  up" || echo "  web UI        :5174  down"
   log "ClickHouse view counts"
   $PY -c "
 from arena.config import load_config; from agents.chclient import make_admin_client
@@ -134,6 +170,8 @@ except Exception: print('  eval_runs: (none)')
 case "${1:-}" in
   up)     [ "${2:-}" = "--seed-only" ] && up_seed_only || up_full ;;
   down)   down "${2:-}" ;;
+  serve)  require_venv; load_env; start_servers ;;
+  stop)   stop_servers; echo "local servers stopped" ;;
   status) status ;;
-  *) echo "usage: scripts/arena.sh {up [--seed-only] | down [--purge] | status}"; exit 1 ;;
+  *) echo "usage: scripts/arena.sh {up [--seed-only] | down [--purge] | serve | stop | status}"; exit 1 ;;
 esac

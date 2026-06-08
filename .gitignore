@@ -11,3 +11,4 @@ schema/schema_context.md
 *.tfstate.*
 .terraform.lock.hcl
 *.tfvars
+.run/

@@ -25,15 +25,19 @@ leaderboard is rendered from a ClickHouse results table (the single source of tr
 ## One-command lifecycle
 
 ```bash
-scripts/arena.sh up               # full stack: Aurora + ClickPipes CDC + ClickStack collector
-scripts/arena.sh up --seed-only   # measurement core only (ClickHouse seed, no AWS/Aurora)
-scripts/arena.sh status           # show Aurora / pipe / collector / view counts
-scripts/arena.sh down             # tear down billable infra (pipe + Aurora) + collector
+scripts/arena.sh up               # full stack: Aurora + ClickPipes CDC + ClickStack + dashboard API + web UI
+scripts/arena.sh up --seed-only   # measurement core only (ClickHouse seed, no AWS/Aurora) + dashboard + web UI
+scripts/arena.sh serve            # (re)start just the dashboard API (:8000) + web UI (:5174)
+scripts/arena.sh stop             # stop just the local servers (leave infra up)
+scripts/arena.sh status           # Aurora / pipe / collector / servers / view counts
+scripts/arena.sh down             # tear down billable infra (pipe + Aurora) + collector + servers
 scripts/arena.sh down --purge     # also drop ClickHouse arena_cdc/arena_house + RO user + otel_*
 ```
-`up`/`down` are idempotent and use `AWS_PROFILE` (default `sa`); they need a valid
-SSO session (`aws sso login --profile sa`). The manual steps below are what
-`arena.sh` automates, for reference.
+`up` now also launches the **dashboard API (:8000)** and **web UI (:5174)** in the
+background (logs in `.run/`), so the demo is one command → open
+http://localhost:5174. `up`/`down` are idempotent and use `AWS_PROFILE`
+(default `sa`); they need a valid SSO session (`aws sso login --profile sa`).
+The manual steps below are what `arena.sh` automates, for reference.
 
 ## Quickstart
 
