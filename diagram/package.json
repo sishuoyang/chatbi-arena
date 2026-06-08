@@ -1,0 +1,21 @@
+{
+  "name": "chatbi-arena-diagram",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Animated React Flow data-flow diagram of the ChatBI Arena architecture",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.3.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}
