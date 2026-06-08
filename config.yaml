@@ -42,6 +42,11 @@ models:
     family: nova
     price_per_1m_in: 0.06
     price_per_1m_out: 0.24
+  - id: apac.amazon.nova-pro-v1:0
+    name: nova-pro
+    family: nova
+    price_per_1m_in: 0.80
+    price_per_1m_out: 3.20
   - id: apac.anthropic.claude-3-haiku-20240307-v1:0
     name: claude-3-haiku
     family: claude
@@ -52,19 +57,29 @@ models:
     family: claude
     price_per_1m_in: 3.00
     price_per_1m_out: 15.00
+  - id: apac.anthropic.claude-sonnet-4-20250514-v1:0
+    name: claude-sonnet-4
+    family: claude
+    price_per_1m_in: 3.00
+    price_per_1m_out: 15.00
 
 prompts:
   - name: P1_zeroshot
     self_correct: false
+    desc: "Zero-shot — just the view schema + the question; return ClickHouse SQL. The baseline."
   - name: P2_fewshot
     self_correct: false
     k: 2
+    desc: "Few-shot — P1 plus a couple of worked NL→SQL examples (held out from the test set)."
   - name: P3_dialect
     self_correct: false
+    desc: "Dialect-aware — P1 plus a ClickHouse cheat-sheet (date funcs, uniqExact, argMax, INTERVAL…)."
   - name: P4_cot
     self_correct: false
+    desc: "Chain-of-thought — reason step by step first, then give the final SQL in a fenced block."
   - name: P5_selfcorrect
     self_correct: true
+    desc: "Self-correcting — P3 plus one retry that feeds the ClickHouse error back to the model."
 
 grid:
   models: ["*"]

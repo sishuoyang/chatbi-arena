@@ -50,7 +50,9 @@ export default function Leaderboard() {
     loadRuns().catch((e) => setError(String(e)))
     api('/api/meta').then(setMeta).catch(() => {})
     api('/api/grid-options').then((o) => {
-      setOpts(o); setSelM(new Set(o.models)); setSelP(new Set(o.prompts))
+      setOpts(o)
+      setSelM(new Set(o.models.map((m) => m.name)))
+      setSelP(new Set(o.prompts.map((p) => p.name)))
     }).catch(() => {})
     return () => clearTimeout(pollRef.current)
   }, [])
@@ -163,15 +165,21 @@ export default function Leaderboard() {
             <div>
               <div className="lb-runhead">Models</div>
               {opts.models.map((m) => (
-                <label key={m} className="lb-chk"><input type="checkbox" checked={selM.has(m)}
-                  onChange={() => setSelM((s) => toggle(s, m))} />{m}</label>
+                <label key={m.name} className="lb-chk" title={m.desc}>
+                  <input type="checkbox" checked={selM.has(m.name)}
+                    onChange={() => setSelM((s) => toggle(s, m.name))} />
+                  <span className="hashint">{m.name}</span>
+                </label>
               ))}
             </div>
             <div>
               <div className="lb-runhead">Prompts</div>
               {opts.prompts.map((p) => (
-                <label key={p} className="lb-chk"><input type="checkbox" checked={selP.has(p)}
-                  onChange={() => setSelP((s) => toggle(s, p))} />{p}</label>
+                <label key={p.name} className="lb-chk" title={p.desc}>
+                  <input type="checkbox" checked={selP.has(p.name)}
+                    onChange={() => setSelP((s) => toggle(s, p.name))} />
+                  <span className="hashint">{p.name}</span>
+                </label>
               ))}
             </div>
             <div className="lb-runside">

@@ -151,9 +151,13 @@ _run_lock = threading.Lock()
 
 @app.get("/api/grid-options")
 def grid_options():
-    """Models + prompts available to run (from config.yaml)."""
-    return {"models": [m.name for m in _cfg.models],
-            "prompts": [p.name for p in _cfg.prompts]}
+    """Models + prompts available to run (from config.yaml), with descriptions for hovers."""
+    return {
+        "models": [{"name": m.name,
+                    "desc": f"{m.family} · ${m.price_per_1m_in:g}/${m.price_per_1m_out:g} per 1M tokens (in/out)"}
+                   for m in _cfg.models],
+        "prompts": [{"name": p.name, "desc": p.desc or p.name} for p in _cfg.prompts],
+    }
 
 
 def _stream_harness(cmd: list[str]):

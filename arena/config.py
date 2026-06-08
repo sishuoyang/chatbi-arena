@@ -70,6 +70,7 @@ class PromptCfg(BaseModel):
     name: str
     self_correct: bool = False
     k: int = 0
+    desc: str = ""
 
 
 class GridCfg(BaseModel):
