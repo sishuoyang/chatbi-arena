@@ -18,6 +18,12 @@ class EvalRunRow:
     sql: str
     tags: str
     data_snapshot_ts: datetime  # passed straight to the DateTime column
+    # LangFuse linkage + LLM-judge score
+    judge_score: float = 0.0
+    trace_id: str = ""
+    session_id: str = ""
+    trace_url: str = ""
+    session_url: str = ""
 
 
 _DDL = """
@@ -25,10 +31,22 @@ CREATE TABLE IF NOT EXISTS {db}.eval_runs (
   run_id String, config_id String, model_name String, prompt_name String,
   question_id String, tier UInt8, correctness UInt8, cost_usd Float64,
   latency_ms UInt32, retries UInt8, outcome String, sql String, tags String,
-  data_snapshot_ts DateTime, inserted_at DateTime DEFAULT now()
+  data_snapshot_ts DateTime,
+  judge_score Float64 DEFAULT 0, trace_id String DEFAULT '', session_id String DEFAULT '',
+  trace_url String DEFAULT '', session_url String DEFAULT '',
+  inserted_at DateTime DEFAULT now()
 ) ENGINE = ReplacingMergeTree(inserted_at)
 ORDER BY (run_id, config_id, question_id)
 """
+
+# Idempotently add the newer columns to a pre-existing eval_runs table.
+_MIGRATIONS = [
+    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS judge_score Float64 DEFAULT 0",
+    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS trace_id String DEFAULT ''",
+    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS session_id String DEFAULT ''",
+    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS trace_url String DEFAULT ''",
+    "ALTER TABLE {db}.eval_runs ADD COLUMN IF NOT EXISTS session_url String DEFAULT ''",
+]
 
 _LEADERBOARD = """
 CREATE VIEW IF NOT EXISTS {db}.v_leaderboard AS
@@ -47,6 +65,8 @@ GROUP BY run_id, config_id, model_name, prompt_name
 
 def ensure_results_tables(admin, db: str) -> None:
     admin.command(_DDL.format(db=db))
+    for m in _MIGRATIONS:
+        admin.command(m.format(db=db))
     admin.command(_LEADERBOARD.format(db=db))
 
 

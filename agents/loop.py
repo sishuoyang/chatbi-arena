@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from agents.bedrock import BedrockClient, Usage, ZeroUsage
 from agents.chclient import ROClickHouseClient
 from agents.sqlguard import validate_select_only
@@ -25,6 +25,9 @@ class AgentResult:
     attempts: int
     usage: Usage
     outcome_hint: str = ""  # 'sql_policy_rejected'|'sql_exec_error'|'ok'
+    # full conversation as [{role, content}] (system, question, model SQL,
+    # error feedback + corrected SQL for self-correcting strategies)
+    transcript: list = field(default_factory=list)
 
 
 def run_agent(question: str, model_cfg: ModelCfg, prompt_cfg: PromptCfg,
@@ -36,10 +39,13 @@ def run_agent(question: str, model_cfg: ModelCfg, prompt_cfg: PromptCfg,
     last_sql = last_err = None
     hint = "ok"
     attempt = 0
+    transcript = [{"role": "system", "content": system},
+                  {"role": "user", "content": question}]
 
     for attempt in range(max_retries + 1):
         resp = bedrock.converse(model_cfg.id, system, messages, inference)
         usage_total = usage_total + resp.usage
+        transcript.append({"role": "assistant", "content": resp.text})
         last_sql = extract_sql_block(resp.text)
         ok, reason = validate_select_only(last_sql)
         if not ok:
@@ -48,13 +54,16 @@ def run_agent(question: str, model_cfg: ModelCfg, prompt_cfg: PromptCfg,
             try:
                 qr = ch.query(last_sql)
                 return AgentResult(last_sql, qr.rows, qr.cols, None,
-                                   attempt + 1, usage_total, "ok")
+                                   attempt + 1, usage_total, "ok", transcript)
             except Exception as e:  # noqa: BLE001
                 last_err, hint = str(e), "sql_exec_error"
         if attempt < max_retries and prompt_cfg.self_correct:
+            transcript.append({"role": "user",
+                               "content": f"That query failed: {last_err}. "
+                                          "Return a corrected ClickHouse SQL query."})
             messages = messages + correction_turn(last_sql or "", last_err or "")
             continue
         break
 
     return AgentResult(last_sql, None, None, last_err,
-                       attempt + 1, usage_total, hint)
+                       attempt + 1, usage_total, hint, transcript)
