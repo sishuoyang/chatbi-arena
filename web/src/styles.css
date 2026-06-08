@@ -56,7 +56,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; c
 .lb-extlink { margin-left: auto; color: #58a6ff; text-decoration: none; font-size: .85rem; }
 .lb-extlink:hover { text-decoration: underline; }
 .lb-table tr.clickrow { cursor: pointer; }
-.lb-table tr.clickrow:hover td { background: #1c2230; }
+/* clear row highlight on hover (main leaderboard, tier heatmap, per-question table) */
+.lb-table tbody tr:hover td { background-color: #243650; transition: background-color .08s; }
+.lb-table tbody tr.win:hover td { background-color: rgba(250, 255, 0, .14); }
+.lb-qtable tbody tr:hover td { background-color: #1f2a3c; }
 .lb-detailrow td { padding: 0 !important; background: #11151c; }
 .lb-detail { padding: .8rem 1rem 1rem; }
 .lb-detail-bar { display: flex; align-items: center; gap: 1rem; color: #8b96a8; font-size: .82rem; margin-bottom: .6rem; }
