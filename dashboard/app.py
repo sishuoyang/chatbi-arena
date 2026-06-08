@@ -25,7 +25,7 @@ def _langfuse():
     return _lf
 # Allow the React SPA (Vite dev server / static build) to call this JSON API.
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"],
+    CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"],
 )
 _cfg = load_config()
 _db = _cfg.clickhouse.database
@@ -96,26 +96,32 @@ def questions(run_id: str, config_id: str):
 
 @app.get("/api/lf/session")
 def lf_session(session_id: str):
-    """Conversation history for a session, read live from the LangFuse API:
-    each trace's question, generated SQL, outcome, and the full message turns."""
+    """List a session's exchanges live from the LangFuse API (one call, fast).
+    Conversation turns are loaded per-exchange via /api/lf/trace on demand."""
     lf = _langfuse()
     traces = lf.fetch_traces(session_id=session_id, limit=50).data
     out = []
     for t in sorted(traces, key=lambda x: (x.metadata or {}).get("question_id", "")):
-        turns = []
-        obs = lf.fetch_observations(trace_id=t.id, type="GENERATION").data
-        if obs and isinstance(obs[0].input, list):
-            turns = [{"role": m.get("role"), "content": m.get("content")}
-                     for m in obs[0].input]
         out.append({
             "question_id": (t.metadata or {}).get("question_id"),
             "question": (t.input or {}).get("question"),
             "sql": (t.output or {}).get("sql"),
             "outcome": (t.metadata or {}).get("outcome"),
+            "trace_id": t.id,
             "trace_url": f"{_lf_base}/traces/{t.id}",
-            "turns": turns,
         })
     return {"session_id": session_id, "source": "langfuse-api", "exchanges": out}
+
+
+@app.get("/api/lf/trace")
+def lf_trace(trace_id: str):
+    """The conversation turns of one trace, from the LangFuse API."""
+    lf = _langfuse()
+    obs = lf.fetch_observations(trace_id=trace_id, type="GENERATION").data
+    turns = []
+    if obs and isinstance(obs[0].input, list):
+        turns = [{"role": m.get("role"), "content": m.get("content")} for m in obs[0].input]
+    return {"trace_id": trace_id, "turns": turns}
 
 
 @app.get("/api/meta")
@@ -125,3 +131,69 @@ def meta():
     from eval.langfuse_adapter import DATASET_NAME
     return {"langfuse_base": _lf_base, "dataset": DATASET_NAME,
             "datasets_url": f"{_lf_base}/datasets" if _lf_base else None}
+
+
+# --- Run the benchmark from the UI (spawns the harness as a subprocess) -------
+# Local/demo use only: this lets the web app trigger `python -m eval.harness`.
+# The API process must have AWS Bedrock creds in its environment.
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+_run_state = {"running": False, "run_id": None, "started_at": None,
+              "lines": [], "returncode": None}
+_run_lock = threading.Lock()
+
+
+@app.get("/api/grid-options")
+def grid_options():
+    """Models + prompts available to run (from config.yaml)."""
+    return {"models": [m.name for m in _cfg.models],
+            "prompts": [p.name for p in _cfg.prompts]}
+
+
+def _stream_harness(cmd: list[str]):
+    proc = subprocess.Popen(cmd, cwd=str(_ROOT), env=os.environ.copy(),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1)
+    for line in proc.stdout:
+        line = line.rstrip()
+        with _run_lock:
+            _run_state["lines"].append(line)
+            _run_state["lines"] = _run_state["lines"][-400:]  # keep tail
+    proc.wait()
+    with _run_lock:
+        _run_state["running"] = False
+        _run_state["returncode"] = proc.returncode
+
+
+@app.post("/api/run")
+def start_run(body: dict):
+    with _run_lock:
+        if _run_state["running"]:
+            return {"ok": False, "error": "a run is already in progress",
+                    "run_id": _run_state["run_id"]}
+        run_id = body.get("run_id") or f"ui-{int(time.time())}"
+        cmd = [sys.executable, "-m", "eval.harness", "--run-id", run_id]
+        if body.get("models"):
+            cmd += ["--models", ",".join(body["models"])]
+        if body.get("prompts"):
+            cmd += ["--prompts", ",".join(body["prompts"])]
+        if body.get("limit"):
+            cmd += ["--limit", str(int(body["limit"]))]
+        if body.get("judge") is False:
+            cmd += ["--no-judge"]
+        _run_state.update(running=True, run_id=run_id, started_at=time.time(),
+                          lines=[f"$ {' '.join(cmd[2:])}"], returncode=None)
+    threading.Thread(target=_stream_harness, args=(cmd,), daemon=True).start()
+    return {"ok": True, "run_id": run_id}
+
+
+@app.get("/api/run/status")
+def run_status():
+    with _run_lock:
+        return dict(_run_state)

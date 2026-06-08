@@ -185,12 +185,19 @@ scripts/arena.sh down [--purge]     # tear down infra (+ optionally drop ClickHo
 ```
 
 ### Running the benchmark
+
+**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → pick models/prompts →
+**Run**. The dashboard API spawns the harness server-side, streams progress, and
+auto-selects the new run when done. (The API process must have AWS Bedrock creds — start
+it with `AWS_PROFILE=<profile>`, which `arena.sh` does for you.)
+
+**From the CLI:**
 ```bash
-AWS_PROFILE=<profile> python -m eval.harness --run-id <name> [--no-judge] [--limit N]
+AWS_PROFILE=<profile> python -m eval.harness --run-id <name> [--models a,b] [--prompts x,y] [--no-judge] [--limit N]
 ```
 - Each invocation is a **run** (`run_id`); it writes one row per *(config × question)* to
   `arena.eval_runs` and a trace per run to LangFuse. The web UI's run selector picks which run to view.
-- The grid (which models × which prompts) is defined in `config.yaml`.
+- The grid (which models × which prompts) defaults to `config.yaml`; `--models`/`--prompts` override it.
 - `--judge` (default on) adds a cheap LLM-judge score; `--limit N` runs the first N questions.
 
 ---

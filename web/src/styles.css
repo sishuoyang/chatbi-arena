@@ -82,6 +82,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; c
 .bubble.user { background: #1c2230; align-self: flex-start; }
 .bubble.assistant { background: #15233a; align-self: flex-end; border: 1px solid #234; }
 
+/* ---- run-from-UI panel ---- */
+.lb-runbtn { background: #1c2230; color: #e8edf4; border: 1px solid #2a3140; border-radius: 8px; padding: .45rem .8rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.lb-runbtn:hover { border-color: #58a6ff; }
+.lb-runbtn.primary { background: #3fb950; color: #0e1116; font-weight: 700; border: none; }
+.lb-runbtn.primary:disabled { background: #2a3140; color: #6e7a8c; cursor: not-allowed; }
+.lb-runpanel { background: #11151c; border: 1px solid #2a3140; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1.2rem; }
+.lb-runcols { display: grid; grid-template-columns: 1fr 1fr auto; gap: 1.5rem; }
+.lb-runhead { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: #6e7a8c; margin-bottom: .4rem; }
+.lb-chk { display: flex; align-items: center; gap: .45rem; font-size: .85rem; margin: .2rem 0; color: #cdd6e3; cursor: pointer; }
+.lb-runside { min-width: 170px; border-left: 1px solid #21262f; padding-left: 1.2rem; }
+.lb-runlog { margin-top: .8rem; border-top: 1px solid #21262f; padding-top: .6rem; }
+.lb-runlog pre { margin: .3rem 0 0; max-height: 220px; overflow: auto; background: #0b0e13; border: 1px solid #21262f; border-radius: 8px; padding: .6rem .8rem; font-size: .76rem; color: #aeb9c9; white-space: pre-wrap; }
+
 /* ---- Zones ---- */
 .zone-node {
   width: 100%; height: 100%;

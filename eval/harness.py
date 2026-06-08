@@ -25,6 +25,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0, help="limit number of questions")
     ap.add_argument("--judge", action=argparse.BooleanOptionalAction, default=True,
                     help="LLM-as-a-judge score (one extra cheap Bedrock call per run)")
+    ap.add_argument("--models", default="", help="CSV of model names to override the config grid")
+    ap.add_argument("--prompts", default="", help="CSV of prompt names to override the config grid")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -60,8 +62,12 @@ def main() -> None:
         golden_cache[q.id] = (gr.rows, gr.cols)
 
     model_names, prompt_names = cfg.resolved_grid()
+    if args.models:
+        model_names = [m for m in model_names if m in set(args.models.split(","))]
+    if args.prompts:
+        prompt_names = [p for p in prompt_names if p in set(args.prompts.split(","))]
     print(f"run_id={run_id} configs={len(model_names)}x{len(prompt_names)} "
-          f"questions={len(questions)}")
+          f"questions={len(questions)}", flush=True)
 
     for mname in model_names:
         mcfg = cfg.model_by_name(mname)
@@ -100,10 +106,9 @@ def main() -> None:
                     trace_url=trace_url, session_url=session_url,
                 ))
                 print(f"  {config_id} {q.id} score={score} judge={judge_score:.1f} "
-                      f"{outcome} {latency_ms}ms ${c:.5f}")
+                      f"{outcome} {latency_ms}ms ${c:.5f}", flush=True)
     tracer.flush()
-    print(f"done. leaderboard: SELECT * FROM {db}.v_leaderboard "
-          f"WHERE run_id='{run_id}' ORDER BY cost_per_correct_answer")
+    print(f"done. run_id={run_id}", flush=True)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, API_BASE } from '../api.js'
 
 const OB_COLORS = {
@@ -7,6 +7,15 @@ const OB_COLORS = {
 }
 const pct = (v) => (v * 100).toFixed(1) + '%'
 const money = (v) => (v == null ? '—' : '$' + Number(v).toFixed(5))
+
+async function post(path, body) {
+  const r = await fetch(API_BASE + path, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw new Error(`${path} → HTTP ${r.status}`)
+  return r.json()
+}
 
 export default function Leaderboard() {
   const [runs, setRuns] = useState([])
@@ -18,14 +27,31 @@ export default function Leaderboard() {
   const [sort, setSort] = useState({ key: 'accuracy', dir: -1 })
   const [error, setError] = useState(null)
 
-  const [expanded, setExpanded] = useState(null)   // config_id whose drill-down is open
-  const [details, setDetails] = useState({})       // config_id -> per-question rows
-  const [conv, setConv] = useState(null)           // {config_id, loading, exchanges}
+  const [expanded, setExpanded] = useState(null)
+  const [details, setDetails] = useState({})
+  const [conv, setConv] = useState(null)             // {config_id, loading, exchanges}
+  const [turns, setTurns] = useState({})             // trace_id -> [{role,content}]
+
+  // run-from-UI
+  const [opts, setOpts] = useState({ models: [], prompts: [] })
+  const [showRun, setShowRun] = useState(false)
+  const [selM, setSelM] = useState(new Set())
+  const [selP, setSelP] = useState(new Set())
+  const [judge, setJudge] = useState(true)
+  const [runStatus, setRunStatus] = useState(null)   // {running, run_id, lines, returncode}
+  const pollRef = useRef(null)
+
+  function loadRuns(select) {
+    return api('/api/runs').then((r) => { setRuns(r); if (select) setRun(select); else if (r.length && !run) setRun(r[0]) })
+  }
 
   useEffect(() => {
-    api('/api/runs').then((r) => { setRuns(r); if (r.length) setRun(r[0]) })
-      .catch((e) => setError(String(e)))
+    loadRuns().catch((e) => setError(String(e)))
     api('/api/meta').then(setMeta).catch(() => {})
+    api('/api/grid-options').then((o) => {
+      setOpts(o); setSelM(new Set(o.models)); setSelP(new Set(o.prompts))
+    }).catch(() => {})
+    return () => clearTimeout(pollRef.current)
   }, [])
 
   useEffect(() => {
@@ -48,7 +74,6 @@ export default function Leaderboard() {
   const totalGraded = board.reduce((s, r) => s + Number(r.n_questions), 0)
   const lfBase = meta.langfuse_base
   const sessionUrl = (cfg) => lfBase && `${lfBase}/sessions/${encodeURIComponent(run + '__' + cfg)}`
-
   const toggleSort = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))
 
   async function toggleExpand(cfg) {
@@ -70,6 +95,36 @@ export default function Leaderboard() {
     }
   }
 
+  async function loadTurns(traceId) {
+    if (!traceId || turns[traceId]) return
+    try {
+      const r = await api(`/api/lf/trace?trace_id=${encodeURIComponent(traceId)}`)
+      setTurns((t) => ({ ...t, [traceId]: r.turns || [] }))
+    } catch { /* ignore */ }
+  }
+
+  // ---- run from UI ----
+  function pollStatus() {
+    api('/api/run/status').then((s) => {
+      setRunStatus(s)
+      if (s.running) { pollRef.current = setTimeout(pollStatus, 1500) }
+      else if (s.run_id) { loadRuns(s.run_id) }   // done -> select the new run
+    }).catch(() => { pollRef.current = setTimeout(pollStatus, 2500) })
+  }
+
+  async function startRun() {
+    try {
+      const r = await post('/api/run', {
+        models: [...selM], prompts: [...selP], judge,
+      })
+      if (!r.ok) { setRunStatus({ running: false, lines: ['⚠ ' + (r.error || 'failed to start')] }); return }
+      setRunStatus({ running: true, run_id: r.run_id, lines: ['starting…'] })
+      clearTimeout(pollRef.current); pollRef.current = setTimeout(pollStatus, 1200)
+    } catch (e) {
+      setRunStatus({ running: false, lines: ['⚠ ' + String(e)] })
+    }
+  }
+
   if (error) {
     return (
       <div className="lb-error">
@@ -83,6 +138,7 @@ export default function Leaderboard() {
   const COLS = [['config_id', 'Config'], ['n_questions', '# Q'], ['accuracy', 'Accuracy'],
     ['n_correct', 'Correct'], ['avg_judge_score', 'LLM judge'], ['total_cost_usd', 'Total $'],
     ['avg_latency_ms', 'Avg latency'], ['cost_per_correct_answer', '$ / correct']]
+  const running = runStatus && runStatus.running
 
   return (
     <div className="lb-wrap">
@@ -91,13 +147,51 @@ export default function Leaderboard() {
         <select value={run || ''} onChange={(e) => setRun(e.target.value)}>
           {runs.map((r) => <option key={r}>{r}</option>)}
         </select>
-        {run && run.startsWith('mock') && <span className="lb-mock">synthetic data</span>}
+        <button className="lb-runbtn" onClick={() => setShowRun((v) => !v)}>▶ Run benchmark</button>
         {meta.datasets_url && (
           <a className="lb-extlink" href={meta.datasets_url} target="_blank" rel="noreferrer">
             Open experiment in LangFuse ↗
           </a>
         )}
       </div>
+
+      {showRun && (
+        <div className="lb-runpanel">
+          <div className="lb-runcols">
+            <div>
+              <div className="lb-runhead">Models</div>
+              {opts.models.map((m) => (
+                <label key={m} className="lb-chk"><input type="checkbox" checked={selM.has(m)}
+                  onChange={() => setSelM((s) => toggle(s, m))} />{m}</label>
+              ))}
+            </div>
+            <div>
+              <div className="lb-runhead">Prompts</div>
+              {opts.prompts.map((p) => (
+                <label key={p} className="lb-chk"><input type="checkbox" checked={selP.has(p)}
+                  onChange={() => setSelP((s) => toggle(s, p))} />{p}</label>
+              ))}
+            </div>
+            <div className="lb-runside">
+              <label className="lb-chk"><input type="checkbox" checked={judge}
+                onChange={() => setJudge((v) => !v)} />LLM judge</label>
+              <div className="lb-dim" style={{ margin: '.4rem 0' }}>
+                {selM.size}×{selP.size} configs × 18 Qs = {selM.size * selP.size * 18} agent calls
+              </div>
+              <button className="lb-runbtn primary" disabled={running || !selM.size || !selP.size}
+                onClick={startRun}>{running ? 'running…' : 'Run'}</button>
+            </div>
+          </div>
+          {runStatus && (
+            <div className="lb-runlog">
+              <div className="lb-dim">{running ? `running ${runStatus.run_id}…`
+                : runStatus.returncode === 0 ? `done — run "${runStatus.run_id}" loaded`
+                : runStatus.returncode != null ? `exited (code ${runStatus.returncode})` : ''}</div>
+              <pre>{(runStatus.lines || []).slice(-14).join('\n')}</pre>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="lb-cards">
         <div className="lb-card win"><div className="k">Winner</div><div className="v">{winner.config_id || '—'}</div></div>
@@ -164,21 +258,23 @@ export default function Leaderboard() {
 
                         {conv && conv.config_id === r.config_id && (
                           <div className="lb-conv">
-                            <div className="lb-conv-head">Conversation history — fetched live from the LangFuse API{conv.loading && ' …loading'}</div>
+                            <div className="lb-conv-head">Conversation history — fetched from the LangFuse API{conv.loading && ' …loading'}</div>
                             {conv.error && <div className="lb-hint">{conv.error}</div>}
                             {conv.exchanges.map((ex) => (
-                              <details key={ex.question_id} className="lb-ex">
+                              <details key={ex.question_id} className="lb-ex"
+                                onToggle={(e) => e.target.open && loadTurns(ex.trace_id)}>
                                 <summary>
                                   <b>{ex.question_id}</b> — {ex.question}
                                   <span className="ob-tag" style={{ background: OB_COLORS[ex.outcome] || '#888' }}>{ex.outcome}</span>
                                 </summary>
                                 <div className="lb-turns">
-                                  {ex.turns.filter((t) => t.role !== 'system').map((t, i) => (
+                                  {(turns[ex.trace_id] || []).filter((t) => t.role !== 'system').map((t, i) => (
                                     <div key={i} className={`bubble ${t.role}`}>
                                       <span className="role">{t.role}</span>
                                       <pre>{t.content}</pre>
                                     </div>
                                   ))}
+                                  {!turns[ex.trace_id] && <div className="lb-dim">loading turns…</div>}
                                 </div>
                               </details>
                             ))}
@@ -196,14 +292,13 @@ export default function Leaderboard() {
 
       <h2>Accuracy by difficulty tier</h2>
       <TierHeat tiers={tiers} />
-
       <h2>Outcome breakdown</h2>
       <Outcomes outcomes={outcomes} />
     </div>
   )
 }
 
-// React fragment that can hold two <tr> siblings with one key
+function toggle(set, v) { const n = new Set(set); n.has(v) ? n.delete(v) : n.add(v); return n }
 function FragmentRow({ children }) { return <>{children}</> }
 
 function TierHeat({ tiers }) {
