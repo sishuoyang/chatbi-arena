@@ -127,7 +127,7 @@ def write_clickhouse(data: dict) -> None:
         span.set_attribute("arena.rows_total", total)
 
 
-def write_aurora(data: dict, dsn: str) -> None:
+def write_aurora(data: dict, dsn: str, force: bool = False) -> None:
     import psycopg2
     from psycopg2.extras import execute_values
     conn = psycopg2.connect(dsn)
@@ -135,6 +135,14 @@ def write_aurora(data: dict, dsn: str) -> None:
     cur = conn.cursor()
     with open("schema/aurora_ddl.sql") as f:
         cur.execute(f.read())
+    # Idempotent: skip if already seeded (inserts use ON CONFLICT DO NOTHING on
+    # deterministic seed-derived primary keys, so a re-run would be a no-op anyway).
+    cur.execute("SELECT count(*) FROM orders")
+    existing = cur.fetchone()[0]
+    if existing and not force:
+        print(f"aurora: already seeded ({existing} orders) — skipping (use --force to re-seed)")
+        conn.rollback(); cur.close(); conn.close()
+        return
     for table, rows in data.items():
         if not rows:
             continue
@@ -143,7 +151,7 @@ def write_aurora(data: dict, dsn: str) -> None:
             cur,
             f"INSERT INTO {table} ({','.join(cols)}) VALUES %s ON CONFLICT DO NOTHING",
             [tuple(r) for r in rows])
-        print(f"aurora: inserted {len(rows)} into {table}")
+        print(f"aurora: inserted {cur.rowcount} new of {len(rows)} {table}")
     conn.commit()
     cur.close()
     conn.close()
@@ -179,6 +187,8 @@ def main() -> None:
     ap.add_argument("--days", type=int, default=90)
     ap.add_argument("--mutate", type=int, default=0,
                     help="(aurora only) advance N random orders' status instead of seeding")
+    ap.add_argument("--force", action="store_true",
+                    help="(aurora only) re-seed even if already populated")
     args = ap.parse_args()
 
     if args.target == "aurora":
@@ -188,7 +198,8 @@ def main() -> None:
         if args.mutate:
             mutate_aurora(dsn, args.mutate, args.seed)
             return
-        write_aurora(gen(args.seed, args.customers, args.products, args.days), dsn)
+        write_aurora(gen(args.seed, args.customers, args.products, args.days), dsn,
+                     force=args.force)
     else:
         write_clickhouse(gen(args.seed, args.customers, args.products, args.days))
     print("done")
