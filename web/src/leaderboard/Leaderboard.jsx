@@ -30,7 +30,7 @@ export default function Leaderboard() {
   const [sort, setSort] = useState({ key: 'accuracy', dir: -1 })
   const [error, setError] = useState(null)
 
-  const [expanded, setExpanded] = useState(null)
+  const [expanded, setExpanded] = useState(() => new Set())  // config_ids expanded simultaneously
   const [details, setDetails] = useState({})
   const [conv, setConv] = useState(null)
   const [turns, setTurns] = useState({})
@@ -78,7 +78,7 @@ export default function Leaderboard() {
 
   useEffect(() => {
     if (!run) return
-    setExpanded(null); setConv(null); setDetails({})
+    setExpanded(new Set()); setConv(null); setDetails({})
     loadBoard(run)
   }, [run])
 
@@ -96,8 +96,7 @@ export default function Leaderboard() {
   const toggleSort = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))
 
   async function toggleExpand(cfg) {
-    if (expanded === cfg) { setExpanded(null); return }
-    setExpanded(cfg); setConv(null)
+    setExpanded((s) => { const n = new Set(s); n.has(cfg) ? n.delete(cfg) : n.add(cfg); return n })
     if (!details[cfg]) {
       const rows = await api(`/api/questions?run_id=${encodeURIComponent(run)}&config_id=${encodeURIComponent(cfg)}`)
       setDetails((d) => ({ ...d, [cfg]: rows }))
@@ -274,7 +273,7 @@ export default function Leaderboard() {
         <tbody>
           {sortedBoard.map((r) => {
             const isWin = Number(r.accuracy) === best
-            const open = expanded === r.config_id
+            const open = expanded.has(r.config_id)
             return (
               <FragmentRow key={r.config_id}>
                 <tr className={isWin ? 'win clickrow' : 'clickrow'} onClick={() => toggleExpand(r.config_id)}>
