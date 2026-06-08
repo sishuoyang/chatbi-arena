@@ -158,6 +158,15 @@ def grid_options():
     }
 
 
+@app.get("/api/profiles")
+def profiles():
+    """Preset model selections (config.yaml `profiles`) resolved to invocable ids."""
+    by_name = {m.name: m.id for m in _cfg.models}
+    return [{"name": p.name, "desc": p.desc,
+             "model_ids": [by_name[n] for n in p.models if n in by_name]}
+            for p in _cfg.profiles]
+
+
 # --- Live Bedrock model catalog -------------------------------------------------
 import re as _re
 

@@ -190,9 +190,11 @@ scripts/arena.sh down [--purge]     # tear down infra (+ optionally drop ClickHo
 
 ### Running the benchmark
 
-**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → **browse the
-live Bedrock catalog** (every text model in the region, filterable by family), tick
-the models to put in the arena (the `config.yaml` set is pre-selected as defaults),
+**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → either click a
+**preset** (e.g. *Open-weight showdown*, *Open vs proprietary*, *Budget tier*,
+*Frontier* — defined in `config.yaml` `profiles`, hover for what each contains) or
+**browse the live Bedrock catalog** (every text model in the region, filterable by
+family) and tick models to put in the arena (the `config.yaml` set is pre-selected),
 pick **prompts**, **name the run**, **Run**. Models you add that aren't in
 `config.yaml` have no price, so their cost shows as $0 (accuracy/latency/judge still work). The dashboard API
 spawns the harness server-side, streams progress, and auto-selects the new run when

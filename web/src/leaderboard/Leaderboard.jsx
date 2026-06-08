@@ -40,6 +40,7 @@ export default function Leaderboard() {
   const [catalog, setCatalog] = useState(null)        // {families:[{family,models}], default_ids}
   const [famFilter, setFamFilter] = useState('All')
   const [selModels, setSelModels] = useState({})      // id -> spec
+  const [profiles, setProfiles] = useState([])
   const [prompts, setPrompts] = useState([])
   const [selP, setSelP] = useState(new Set())
   const [judge, setJudge] = useState(true)
@@ -57,6 +58,7 @@ export default function Leaderboard() {
     loadRuns().catch((e) => setError(String(e)))
     api('/api/meta').then(setMeta).catch(() => {})
     api('/api/grid-options').then((o) => { setPrompts(o.prompts); setSelP(new Set(o.prompts.map((p) => p.name))) }).catch(() => {})
+    api('/api/profiles').then(setProfiles).catch(() => {})
     api('/api/bedrock-models').then((c) => {
       setCatalog(c)
       const def = {}
@@ -116,6 +118,13 @@ export default function Leaderboard() {
   function toggleModel(m) {
     setSelModels((s) => { const n = { ...s }; if (n[m.id]) delete n[m.id]; else n[m.id] = m; return n })
   }
+  function applyProfile(p) {
+    const byId = {}
+    ;(catalog?.families || []).forEach((f) => f.models.forEach((m) => { byId[m.id] = m }))
+    const sel = {}
+    p.model_ids.forEach((id) => { if (byId[id]) sel[id] = byId[id] })
+    setSelModels(sel)
+  }
   const families = catalog ? catalog.families : []
   const shownModels = famFilter === 'All'
     ? families.flatMap((f) => f.models)
@@ -173,6 +182,15 @@ export default function Leaderboard() {
       {showRun && (
         <div className="lb-runpanel">
           <div className="lb-runhead">Build the arena — {catalog ? `${catalog.families.reduce((n, f) => n + f.models.length, 0)} models live in ${catalog.region}` : 'loading models…'} · {selCount} selected</div>
+          {profiles.length > 0 && (
+            <div className="lb-profiles">
+              <span className="lb-dim">Presets:</span>
+              {profiles.map((p) => (
+                <button key={p.name} className="prof" onClick={() => applyProfile(p)}
+                  data-tooltip-id="tip" data-tooltip-content={p.desc}>{p.name}</button>
+              ))}
+            </div>
+          )}
           <div className="lb-fams">
             <button className={famFilter === 'All' ? 'fam on' : 'fam'} onClick={() => setFamFilter('All')}>All</button>
             {families.map((f) => (

@@ -121,3 +121,28 @@ prompts:
 grid:
   models: ["*"]
   prompts: ["*"]
+
+# Preset model selections for the web UI's "Run benchmark" panel. Each profile is
+# a one-click curated comparison; models reference the names above.
+profiles:
+  - name: "Open-weight showdown"
+    desc: "All open-weight models head-to-head — Qwen, DeepSeek, OpenAI gpt-oss, and Kimi."
+    models: [qwen3-32b, qwen3-80b, qwen3-235b, deepseek-v3.2, deepseek-r1, gpt-oss-20b, gpt-oss-120b, kimi-k2.5, kimi-k2-thinking]
+  - name: "Claude lineup (proprietary)"
+    desc: "Anthropic's proprietary Claude across sizes — Haiku vs Sonnet vs Opus."
+    models: [claude-haiku-4.5, claude-sonnet-4.5, claude-opus-4.5]
+  - name: "Open vs proprietary"
+    desc: "Top open-weight models against the frontier proprietary family (Claude)."
+    models: [claude-sonnet-4.5, claude-opus-4.5, qwen3-235b, deepseek-r1, kimi-k2-thinking, gpt-oss-120b]
+  - name: "Budget tier"
+    desc: "Smallest / cheapest model from each family — best cost-per-correct answer."
+    models: [claude-haiku-4.5, qwen3-32b, gpt-oss-20b, deepseek-v3.2, kimi-k2.5]
+  - name: "Frontier / flagship"
+    desc: "The largest model from each family — maximum capability, higher cost."
+    models: [claude-opus-4.5, qwen3-235b, gpt-oss-120b, deepseek-r1, kimi-k2-thinking]
+  - name: "Reasoning models"
+    desc: "Chain-of-thought 'thinking' models — DeepSeek-R1, gpt-oss-120b, Kimi-K2-Thinking."
+    models: [deepseek-r1, gpt-oss-120b, kimi-k2-thinking]
+  - name: "Everything"
+    desc: "All curated models across every family (the full grid)."
+    models: [claude-haiku-4.5, claude-sonnet-4.5, claude-opus-4.5, qwen3-32b, qwen3-80b, qwen3-235b, deepseek-v3.2, deepseek-r1, gpt-oss-20b, gpt-oss-120b, kimi-k2.5, kimi-k2-thinking]
