@@ -182,6 +182,13 @@ export default function Leaderboard() {
     )
   }
 
+  const COL_DESC = {
+    accuracy: 'Execution accuracy — fraction of questions whose result set exactly matches the golden answer (the ground truth).',
+    avg_judge_score: 'Average LLM-judge score (0–100%): a separate LLM rating the SQL quality. Plausibility, not correctness — secondary to accuracy.',
+    cost_per_correct_answer: 'Total Bedrock $ ÷ number of correct answers. The headline efficiency metric — a cheap-but-wrong model scores badly here.',
+    avg_latency_ms: 'Average wall-clock time per question (NL→SQL generation, measured in the harness).',
+    total_cost_usd: 'Total Bedrock token cost for this config across all questions (tokens × configured prices).',
+  }
   const COLS = [['config_id', 'Config'], ['n_questions', '# Q'], ['accuracy', 'Accuracy'],
     ['n_correct', 'Correct'], ['avg_judge_score', 'LLM judge'], ['total_cost_usd', 'Total $'],
     ['avg_latency_ms', 'Avg latency'], ['cost_per_correct_answer', '$ / correct']]
@@ -247,8 +254,9 @@ export default function Leaderboard() {
               <div className="lb-runhead">Run name</div>
               <input className="lb-runname" placeholder="e.g. sonnet-vs-qwen" value={runName}
                 onChange={(e) => setRunName(e.target.value.replace(/[^A-Za-z0-9._-]/g, '-'))} />
-              <label className="lb-chk" style={{ marginTop: '.5rem' }}>
-                <input type="checkbox" checked={judge} onChange={() => setJudge((v) => !v)} />LLM judge
+              <label className="lb-chk" style={{ marginTop: '.5rem' }} data-tooltip-id="tip"
+                data-tooltip-content="Also have a separate LLM rate each answer's SQL quality 0–100% (one extra cheap Bedrock call per question). A secondary signal — execution accuracy stays the ground truth.">
+                <input type="checkbox" checked={judge} onChange={() => setJudge((v) => !v)} /><span className="hashint">LLM judge</span>
               </label>
               <div className="lb-dim" style={{ margin: '.4rem 0' }}>
                 {selCount}×{selP.size} configs × 18 Qs = {selCount * selP.size * 18} agent calls
@@ -292,7 +300,8 @@ export default function Leaderboard() {
       <table className="lb-table">
         <thead><tr>
           <th className="left" style={{ width: 18 }}></th>
-          {COLS.map(([k, label]) => (<th key={k} onClick={() => toggleSort(k)} className={k === 'config_id' ? 'left' : ''}>{label}</th>))}
+          {COLS.map(([k, label]) => (<th key={k} onClick={() => toggleSort(k)} className={k === 'config_id' ? 'left' : ''}
+            data-tooltip-id="tip" data-tooltip-content={COL_DESC[k]}>{label}</th>))}
         </tr></thead>
         <tbody>
           {sortedBoard.map((r) => {
@@ -323,7 +332,13 @@ export default function Leaderboard() {
                           </span>
                         </div>
                         <table className="lb-qtable">
-                          <thead><tr><th className="left">Q</th><th>tier</th><th></th><th>judge</th><th>latency</th><th>outcome</th><th className="left">trace</th></tr></thead>
+                          <thead><tr>
+                            <th className="left">Q</th>
+                            <th data-tooltip-id="tip" data-tooltip-content="Difficulty tier: 1 = simple aggregation … 5 = funnel / window / retention.">tier</th>
+                            <th data-tooltip-id="tip" data-tooltip-content="✓ = the SQL executed to the exact correct result set (execution accuracy); ✗ = wrong/failed.">✓</th>
+                            <th data-tooltip-id="tip" data-tooltip-content="LLM-judge score for this answer (0–100%): an LLM's SQL-quality rating, separate from whether it ran to the correct result.">judge</th>
+                            <th>latency</th><th>outcome</th><th className="left">trace</th>
+                          </tr></thead>
                           <tbody>
                             {(Array.isArray(details[r.config_id]) ? details[r.config_id] : []).map((q) => (
                               <tr key={q.question_id}>
