@@ -68,13 +68,18 @@ export default function Leaderboard() {
     return () => clearTimeout(pollRef.current)
   }, [])
 
+  function loadBoard(rid) {
+    if (!rid) return
+    const q = `?run_id=${encodeURIComponent(rid)}`
+    return Promise.all([api('/api/leaderboard' + q), api('/api/tiers' + q), api('/api/outcomes' + q)])
+      .then(([b, t, o]) => { setBoard(b); setTiers(t); setOutcomes(o); setError(null) })
+      .catch((e) => setError(String(e)))
+  }
+
   useEffect(() => {
     if (!run) return
     setExpanded(null); setConv(null); setDetails({})
-    const q = `?run_id=${encodeURIComponent(run)}`
-    Promise.all([api('/api/leaderboard' + q), api('/api/tiers' + q), api('/api/outcomes' + q)])
-      .then(([b, t, o]) => { setBoard(b); setTiers(t); setOutcomes(o); setError(null) })
-      .catch((e) => setError(String(e)))
+    loadBoard(run)
   }, [run])
 
   const sortedBoard = useMemo(() => {
@@ -135,7 +140,12 @@ export default function Leaderboard() {
     api('/api/run/status').then((s) => {
       setRunStatus(s)
       if (s.running) pollRef.current = setTimeout(pollStatus, 1500)
-      else if (s.run_id) loadRuns(s.run_id)
+      else if (s.run_id) {
+        // done → refresh the run list, select the new run, and force-load its
+        // board (the run-change effect can miss it if the run was already selected).
+        loadRuns(s.run_id)
+        setTimeout(() => loadBoard(s.run_id), 800)
+      }
     }).catch(() => { pollRef.current = setTimeout(pollStatus, 2500) })
   }
   async function startRun() {
