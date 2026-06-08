@@ -106,9 +106,13 @@ export default function Leaderboard() {
 
   async function toggleExpand(cfg) {
     setExpanded((s) => { const n = new Set(s); n.has(cfg) ? n.delete(cfg) : n.add(cfg); return n })
-    if (!details[cfg]) {
-      const rows = await api(`/api/questions?run_id=${encodeURIComponent(run)}&config_id=${encodeURIComponent(cfg)}`)
-      setDetails((d) => ({ ...d, [cfg]: rows }))
+    if (details[cfg] === undefined) {
+      try {
+        const rows = await api(`/api/questions?run_id=${encodeURIComponent(run)}&config_id=${encodeURIComponent(cfg)}`)
+        setDetails((d) => ({ ...d, [cfg]: rows }))
+      } catch (e) {
+        setDetails((d) => ({ ...d, [cfg]: { error: String(e) } }))
+      }
     }
   }
 
@@ -321,7 +325,7 @@ export default function Leaderboard() {
                         <table className="lb-qtable">
                           <thead><tr><th className="left">Q</th><th>tier</th><th></th><th>judge</th><th>latency</th><th>outcome</th><th className="left">trace</th></tr></thead>
                           <tbody>
-                            {(details[r.config_id] || []).map((q) => (
+                            {(Array.isArray(details[r.config_id]) ? details[r.config_id] : []).map((q) => (
                               <tr key={q.question_id}>
                                 <td className="left mono">{q.question_id}</td>
                                 <td className="mono">{q.tier}</td>
@@ -334,6 +338,13 @@ export default function Leaderboard() {
                             ))}
                           </tbody>
                         </table>
+                        {details[r.config_id] === undefined && <div className="lb-dim" style={{ padding: '.5rem' }}>loading…</div>}
+                        {details[r.config_id] && details[r.config_id].error && (
+                          <div className="lb-hint" style={{ padding: '.5rem' }}>
+                            Couldn't load per-question results: {details[r.config_id].error}.
+                            Is the dashboard API up to date? Restart it (<code>scripts/arena.sh serve</code>).
+                          </div>
+                        )}
                         {conv && conv.config_id === r.config_id && (
                           <div className="lb-conv">
                             <div className="lb-conv-head">Conversation history — fetched from the LangFuse API{conv.loading && ' …loading'}</div>
