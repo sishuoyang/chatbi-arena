@@ -72,7 +72,6 @@ export default function Countdown() {
           <div className="cd-frame">
             <img src={arenaImg} alt="ChatBI Arena — models battle for NL→SQL supremacy" />
             <div className="cd-vfx">
-              <div className="sheen" />
               <div className="beam b1" /><div className="beam b2" />
               <div className="beam b3" /><div className="beam b4" />
               <div className="clash" />

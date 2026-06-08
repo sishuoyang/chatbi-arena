@@ -63,14 +63,6 @@
 
 /* VFX layer sits exactly over the image */
 .cd-vfx { position: absolute; inset: 0; pointer-events: none; }
-/* sweeping stage-light sheen */
-.cd-vfx .sheen {
-  position: absolute; inset: -20% -40%;
-  background: linear-gradient(105deg, transparent 38%, rgba(255,240,200,.18) 48%, rgba(255,255,255,.32) 50%, rgba(255,240,200,.18) 52%, transparent 62%);
-  transform: translateX(-30%); animation: sweep 5.5s ease-in-out infinite; mix-blend-mode: screen;
-}
-@keyframes sweep { 0%,100% { transform: translateX(-32%); } 50% { transform: translateX(32%); } }
-
 /* energy bloom at the sword clash (center) */
 .cd-vfx .clash {
   position: absolute; left: 50%; top: 53%; width: 230px; height: 230px;
