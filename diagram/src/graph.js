@@ -1,5 +1,5 @@
-// The ChatBI Arena architecture, as React Flow nodes + animated edges.
-// Zones (translucent backgrounds) group nodes by where they run.
+// The ChatBI Arena architecture as React Flow nodes + animated edges.
+// Positions are computed by dagre (layout.js); nodes only declare a size + env.
 
 export const EDGE_COLORS = {
   data: '#3fb950',       // OLTP writes + CDC replication
@@ -10,85 +10,65 @@ export const EDGE_COLORS = {
   telemetry: '#39c5cf',  // OTel telemetry
 }
 
-// ---- Zones (rendered behind the cards) -------------------------------------
-const zones = [
-  { id: 'z-local', type: 'zone', position: { x: 40, y: 40 },
-    data: { label: 'Local / Docker  (your machine)', accent: '#58a6ff' },
-    style: { width: 450, height: 760 } },
-  { id: 'z-aws', type: 'zone', position: { x: 515, y: 130 },
-    data: { label: 'AWS · ap-southeast-1', accent: '#ff9900' },
-    style: { width: 290, height: 470 } },
-  { id: 'z-ch', type: 'zone', position: { x: 850, y: 60 },
-    data: { label: 'ClickHouse Cloud · AWS ap-southeast-1', accent: '#faff00' },
-    style: { width: 410, height: 660 } },
-  { id: 'z-saas', type: 'zone', position: { x: 850, y: 770 },
-    data: { label: 'SaaS', accent: '#a371f7' },
-    style: { width: 410, height: 120 } },
+// Where each component runs -> card accent color (legend, not a bounding box).
+export const ENV = {
+  local: { label: 'Local / Docker', color: '#58a6ff' },
+  aws: { label: 'AWS · ap-southeast-1', color: '#ff9900' },
+  ch: { label: 'ClickHouse Cloud (AWS)', color: '#f5d90a' },
+  saas: { label: 'LangFuse Cloud (SaaS)', color: '#a371f7' },
+}
+
+const card = (id, env, title, subtitle, kind, w = 215) => ({
+  id, type: 'card', position: { x: 0, y: 0 }, width: w, height: 66,
+  data: { title, subtitle, kind, env, accent: ENV[env].color },
+})
+
+export const componentNodes = [
+  card('user', 'local', 'Analyst', 'asks a question', 'user', 170),
+  card('datagen', 'local', 'Data generator', 'Faker · seed + mutations', 'job'),
+  card('golden', 'local', 'Golden set', '20 Qs × 5 tiers + golden SQL', 'data'),
+  card('serving', 'local', 'Serving API', 'FastAPI · POST /ask', 'api'),
+  card('harness', 'local', 'Benchmark harness', 'grid runner + grader', 'job'),
+  card('agent', 'local', 'Agent core', 'loop · P1–P5 · SQL guard', 'agent', 230),
+  card('collector', 'local', 'OTel collector', 'clickstack-otel-collector', 'otel'),
+  card('dashboard', 'local', 'Leaderboard dashboard', 'FastAPI · reads ClickHouse', 'api'),
+
+  card('aurora', 'aws', 'Aurora PostgreSQL', 'Serverless v2 · OLTP source', 'db', 235),
+  card('bedrock', 'aws', 'Amazon Bedrock', 'Converse · Nova + Claude', 'ai', 235),
+
+  card('cdc', 'ch', 'arena_cdc tables', 'ReplacingMergeTree (CDC landing)', 'db', 300),
+  card('views', 'ch', 'v_* analytic views', 'FINAL · dedup current state', 'view', 300),
+  card('evalruns', 'ch', 'eval_runs + v_leaderboard', 'results · cost-per-correct', 'db', 300),
+  card('otel', 'ch', 'otel_* / ClickStack', 'traces · metrics · logs', 'otel', 300),
+
+  card('langfuse', 'saas', 'LangFuse Cloud', 'traces + correctness/cost/latency', 'trace', 300),
 ]
 
-// ---- Component cards --------------------------------------------------------
-const card = (id, x, y, data, w = 190) =>
-  ({ id, type: 'card', position: { x, y }, data, style: { width: w }, zIndex: 1 })
-
-const cards = [
-  // Local / Docker
-  card('user', 130, 70, { title: 'Analyst', subtitle: 'asks a question', kind: 'user', accent: '#8b96a8' }, 150),
-  card('serving', 70, 175, { title: 'Serving API', subtitle: 'FastAPI · POST /ask', kind: 'api', accent: '#58a6ff' }),
-  card('harness', 275, 175, { title: 'Benchmark harness', subtitle: 'grid runner + grader', kind: 'job', accent: '#58a6ff' }),
-  card('agent', 70, 330, { title: 'Agent core', subtitle: 'loop · P1–P5 prompts · SQL guard', kind: 'agent', accent: '#58a6ff' }),
-  card('golden', 275, 330, { title: 'Golden set', subtitle: '20 Qs × 5 tiers + golden SQL', kind: 'data', accent: '#58a6ff' }),
-  card('datagen', 70, 510, { title: 'Data generator', subtitle: 'Faker · seed + mutations', kind: 'job', accent: '#58a6ff' }),
-  card('collector', 275, 510, { title: 'OTel collector', subtitle: 'clickstack-otel-collector', kind: 'otel', accent: '#39c5cf' }),
-  card('dashboard', 70, 690, { title: 'Leaderboard dashboard', subtitle: 'FastAPI · reads ClickHouse', kind: 'api', accent: '#58a6ff' }),
-
-  // AWS
-  card('aurora', 545, 200, { title: 'Aurora PostgreSQL', subtitle: 'Serverless v2 · OLTP source', kind: 'db', accent: '#ff9900' }, 230),
-  card('bedrock', 545, 470, { title: 'Amazon Bedrock', subtitle: 'Converse · Nova + Claude', kind: 'ai', accent: '#ff9900' }, 230),
-
-  // ClickHouse Cloud
-  card('cdc', 890, 130, { title: 'arena_cdc tables', subtitle: 'ReplacingMergeTree (CDC landing)', kind: 'db', accent: '#faff00' }, 330),
-  card('views', 890, 280, { title: 'v_* analytic views', subtitle: 'FINAL · dedup current state', kind: 'view', accent: '#faff00' }, 330),
-  card('evalruns', 890, 430, { title: 'eval_runs + v_leaderboard', subtitle: 'results · cost-per-correct', kind: 'db', accent: '#faff00' }, 330),
-  card('otel', 890, 600, { title: 'otel_* / ClickStack', subtitle: 'traces · metrics · logs', kind: 'otel', accent: '#faff00' }, 330),
-
-  // SaaS
-  card('langfuse', 890, 815, { title: 'LangFuse Cloud', subtitle: 'traces + correctness/cost/latency scores', kind: 'trace', accent: '#a371f7' }, 330),
-]
-
-export const nodes = [...zones, ...cards]
-
-// ---- Animated data-flow edges ----------------------------------------------
-const e = (id, source, target, label, color, sh, th) => ({
+// All edges flow forward in the dagre LR ranking, so source=right, target=left.
+const e = (id, source, target, label, color) => ({
   id, source, target, label, type: 'flow',
-  sourceHandle: sh, targetHandle: th,
+  sourceHandle: 's-right', targetHandle: 't-left',
   data: { color: EDGE_COLORS[color] },
 })
 
 export const edges = [
-  // OLTP + CDC data plane (green)
-  e('datagen-aurora', 'datagen', 'aurora', 'INSERT + status UPDATEs', 'data', 's-right', 't-left'),
-  e('aurora-cdc', 'aurora', 'cdc', 'ClickPipes CDC · logical replication', 'data', 's-right', 't-left'),
-  e('cdc-views', 'cdc', 'views', 'FINAL dedup', 'data', 's-bottom', 't-top'),
+  e('datagen-aurora', 'datagen', 'aurora', 'INSERT + status UPDATEs', 'data'),
+  e('aurora-cdc', 'aurora', 'cdc', 'ClickPipes CDC · logical replication', 'data'),
+  e('cdc-views', 'cdc', 'views', 'FINAL dedup', 'data'),
 
-  // AI inference (purple)
-  e('agent-bedrock', 'agent', 'bedrock', 'Converse (NL→SQL) + tokens', 'ai', 's-right', 't-left'),
+  e('agent-bedrock', 'agent', 'bedrock', 'Converse (NL→SQL) + tokens', 'ai'),
+  e('agent-views', 'agent', 'views', 'read-only SELECT (sandboxed)', 'read'),
+  e('evalruns-dashboard', 'evalruns', 'dashboard', 'leaderboard (read)', 'read'),
 
-  // Read-only analytic queries (yellow)
-  e('agent-views', 'agent', 'views', 'read-only SELECT (sandboxed)', 'read', 's-right', 't-left'),
-  e('evalruns-dashboard', 'evalruns', 'dashboard', 'leaderboard (read)', 'read', 's-left', 't-right'),
+  e('golden-harness', 'golden', 'harness', 'questions + golden SQL', 'control'),
+  e('harness-agent', 'harness', 'agent', 'run grid: model × prompt', 'control'),
+  e('user-serving', 'user', 'serving', 'POST /ask', 'control'),
+  e('serving-agent', 'serving', 'agent', 'reuses agent core', 'control'),
 
-  // Orchestration / requests (blue)
-  e('golden-harness', 'golden', 'harness', 'questions + golden SQL', 'control', 's-top', 't-bottom'),
-  e('harness-agent', 'harness', 'agent', 'run grid: model × prompt', 'control', 's-left', 't-right'),
-  e('user-serving', 'user', 'serving', 'POST /ask', 'control', 's-bottom', 't-top'),
-  e('serving-agent', 'serving', 'agent', 'reuses agent core', 'control', 's-bottom', 't-top'),
+  e('harness-evalruns', 'harness', 'evalruns', 'grade (exec accuracy) → write', 'data'),
+  e('harness-langfuse', 'harness', 'langfuse', 'traces + scores', 'trace'),
 
-  // Grading results + traces (pink/green)
-  e('harness-evalruns', 'harness', 'evalruns', 'grade (exec accuracy) → write', 'data', 's-right', 't-left'),
-  e('harness-langfuse', 'harness', 'langfuse', 'traces + scores', 'trace', 's-bottom', 't-left'),
-
-  // Telemetry (cyan)
-  e('datagen-collector', 'datagen', 'collector', 'OTLP', 'telemetry', 's-right', 't-left'),
-  e('serving-collector', 'serving', 'collector', 'OTLP', 'telemetry', 's-bottom', 't-top'),
-  e('collector-otel', 'collector', 'otel', 'write telemetry', 'telemetry', 's-right', 't-left'),
+  e('datagen-collector', 'datagen', 'collector', 'OTLP', 'telemetry'),
+  e('serving-collector', 'serving', 'collector', 'OTLP', 'telemetry'),
+  e('collector-otel', 'collector', 'otel', 'write telemetry', 'telemetry'),
 ]

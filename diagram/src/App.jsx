@@ -4,15 +4,15 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { nodes as rawNodes, edges as rawEdges, EDGE_COLORS } from './graph.js'
+import { componentNodes, edges as rawEdges, EDGE_COLORS, ENV } from './graph.js'
+import { layoutLR } from './layout.js'
 import CardNode from './nodes/CardNode.jsx'
-import ZoneNode from './nodes/ZoneNode.jsx'
 import AnimatedFlowEdge from './edges/AnimatedFlowEdge.jsx'
 
-const nodeTypes = { card: CardNode, zone: ZoneNode }
+const nodeTypes = { card: CardNode }
 const edgeTypes = { flow: AnimatedFlowEdge }
 
-const LEGEND = [
+const FLOW_LEGEND = [
   ['OLTP + CDC data', EDGE_COLORS.data],
   ['Bedrock inference', EDGE_COLORS.ai],
   ['read-only query', EDGE_COLORS.read],
@@ -22,10 +22,11 @@ const LEGEND = [
 ]
 
 export default function App() {
+  const nodes = useMemo(() => layoutLR(componentNodes, rawEdges), [])
   const edges = useMemo(
     () => rawEdges.map((e) => ({
       ...e,
-      markerEnd: { type: MarkerType.ArrowClosed, color: e.data.color, width: 16, height: 16 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: e.data.color, width: 15, height: 15 },
     })),
     [],
   )
@@ -33,20 +34,20 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0e1116' }}>
       <ReactFlow
-        nodes={rawNodes}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.12 }}
+        fitViewOptions={{ padding: 0.1 }}
         minZoom={0.2}
         proOptions={{ hideAttribution: true }}
         nodesDraggable
-        elevateNodesOnSelect
+        elevateEdgesOnSelect
       >
         <Background color="#1c2230" gap={26} size={1.5} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable nodeColor={(n) => (n.type === 'zone' ? 'transparent' : (n.data?.accent || '#888'))}
+        <MiniMap pannable zoomable nodeColor={(n) => n.data?.accent || '#888'}
           maskColor="rgba(14,17,22,0.7)" style={{ background: '#161b22' }} />
 
         <Panel position="top-left" className="title-panel">
@@ -56,8 +57,16 @@ export default function App() {
           </div>
         </Panel>
 
-        <Panel position="bottom-right" className="legend-panel">
-          {LEGEND.map(([label, color]) => (
+        <Panel position="top-right" className="legend-panel">
+          <div className="legend-head">Runs on</div>
+          {Object.values(ENV).map((envv) => (
+            <div key={envv.label} className="legend-row">
+              <span className="legend-dot" style={{ background: envv.color }} />
+              {envv.label}
+            </div>
+          ))}
+          <div className="legend-head" style={{ marginTop: 8 }}>Flow type</div>
+          {FLOW_LEGEND.map(([label, color]) => (
             <div key={label} className="legend-row">
               <span className="legend-swatch" style={{ background: color }} />
               {label}
