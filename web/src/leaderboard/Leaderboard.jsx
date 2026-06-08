@@ -38,6 +38,7 @@ export default function Leaderboard() {
   const [selM, setSelM] = useState(new Set())
   const [selP, setSelP] = useState(new Set())
   const [judge, setJudge] = useState(true)
+  const [runName, setRunName] = useState('')
   const [runStatus, setRunStatus] = useState(null)   // {running, run_id, lines, returncode}
   const pollRef = useRef(null)
 
@@ -116,6 +117,7 @@ export default function Leaderboard() {
     try {
       const r = await post('/api/run', {
         models: [...selM], prompts: [...selP], judge,
+        run_id: runName.trim() || undefined,
       })
       if (!r.ok) { setRunStatus({ running: false, lines: ['⚠ ' + (r.error || 'failed to start')] }); return }
       setRunStatus({ running: true, run_id: r.run_id, lines: ['starting…'] })
@@ -173,8 +175,13 @@ export default function Leaderboard() {
               ))}
             </div>
             <div className="lb-runside">
-              <label className="lb-chk"><input type="checkbox" checked={judge}
-                onChange={() => setJudge((v) => !v)} />LLM judge</label>
+              <div className="lb-runhead">Run name</div>
+              <input className="lb-runname" placeholder="e.g. sonnet-vs-nova"
+                value={runName}
+                onChange={(e) => setRunName(e.target.value.replace(/[^A-Za-z0-9._-]/g, '-'))} />
+              <label className="lb-chk" style={{ marginTop: '.5rem' }}>
+                <input type="checkbox" checked={judge} onChange={() => setJudge((v) => !v)} />LLM judge
+              </label>
               <div className="lb-dim" style={{ margin: '.4rem 0' }}>
                 {selM.size}×{selP.size} configs × 18 Qs = {selM.size * selP.size * 18} agent calls
               </div>

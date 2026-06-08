@@ -186,10 +186,12 @@ scripts/arena.sh down [--purge]     # tear down infra (+ optionally drop ClickHo
 
 ### Running the benchmark
 
-**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → pick models/prompts →
-**Run**. The dashboard API spawns the harness server-side, streams progress, and
-auto-selects the new run when done. (The API process must have AWS Bedrock creds — start
-it with `AWS_PROFILE=<profile>`, which `arena.sh` does for you.)
+**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → pick which
+**models** and **prompts** to benchmark, **name the run**, **Run**. The dashboard API
+spawns the harness server-side, streams progress, and auto-selects the new run when
+done. The **Run dropdown** lists past runs (each is one named execution) — pick one to
+view its results. (The API process must have AWS Bedrock creds — start it with
+`AWS_PROFILE=<profile>`, which `arena.sh` does for you.)
 
 **From the CLI:**
 ```bash
