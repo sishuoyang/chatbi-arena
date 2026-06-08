@@ -31,7 +31,7 @@ export const componentNodes = [
   card('harness', 'local', 'Benchmark harness', 'grid runner + grader', 'job'),
   card('agent', 'local', 'Agent core', 'loop · P1–P5 · SQL guard', 'agent', 230),
   card('collector', 'local', 'OTel collector', 'clickstack-otel-collector', 'otel'),
-  card('dashboard', 'local', 'Leaderboard dashboard', 'FastAPI · reads ClickHouse', 'api'),
+  card('dashboard', 'local', 'Leaderboard dashboard', 'FastAPI · reads ClickHouse + LangFuse', 'api'),
 
   card('aurora', 'aws', 'Aurora PostgreSQL', 'Serverless v2 · OLTP source', 'db', 235),
   card('bedrock', 'aws', 'Amazon Bedrock', 'Converse · Nova + Claude', 'ai', 235),
@@ -68,6 +68,7 @@ export const edges = [
 
   e('harness-evalruns', 'harness', 'evalruns', 'grade', 'grade by execution accuracy → write', 'data'),
   e('harness-langfuse', 'harness', 'langfuse', 'trace', 'traces + correctness/cost/latency scores', 'trace'),
+  e('langfuse-dashboard', 'langfuse', 'dashboard', 'read', 'sessions + conversation traces, read live via the LangFuse API', 'trace'),
 
   e('datagen-collector', 'datagen', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
   e('serving-collector', 'serving', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
