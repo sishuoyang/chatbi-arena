@@ -43,7 +43,11 @@ def run_agent(question: str, model_cfg: ModelCfg, prompt_cfg: PromptCfg,
                   {"role": "user", "content": question}]
 
     for attempt in range(max_retries + 1):
-        resp = bedrock.converse(model_cfg.id, system, messages, inference)
+        try:
+            resp = bedrock.converse(model_cfg.id, system, messages, inference)
+        except Exception as e:  # noqa: BLE001 - a bad model shouldn't crash the grid
+            last_err, hint = f"model error: {e}", "model_error"
+            break
         usage_total = usage_total + resp.usage
         transcript.append({"role": "assistant", "content": resp.text})
         last_sql = extract_sql_block(resp.text)

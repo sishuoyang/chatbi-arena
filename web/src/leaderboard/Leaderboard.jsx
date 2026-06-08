@@ -4,6 +4,7 @@ import { api, API_BASE } from '../api.js'
 const OB_COLORS = {
   correct: '#3fb950', wrong_result: '#f85149', sql_exec_error: '#d29922',
   sql_policy_rejected: '#a371f7', empty_but_expected: '#58a6ff', timeout: '#8b96a8',
+  model_error: '#db61a2',
 }
 const pct = (v) => (v * 100).toFixed(1) + '%'
 const money = (v) => (v == null ? '—' : '$' + Number(v).toFixed(5))

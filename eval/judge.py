@@ -4,7 +4,7 @@ it shows up as a metric that exists because LangFuse is the eval store.
 """
 import re
 
-JUDGE_MODEL = "apac.amazon.nova-lite-v1:0"  # cheap judge model
+JUDGE_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"  # reliable, cheap-ish judge (us-east-1)
 _SYS = (
     "You are a strict SQL reviewer for a ClickHouse analytics database. Given a "
     "natural-language question and a candidate SQL query, rate how well the SQL "

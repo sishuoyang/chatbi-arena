@@ -15,9 +15,9 @@ def test_env_expansion(monkeypatch):
     assert cfg.clickhouse.host == "example.clickhouse.cloud"
     assert cfg.clickhouse.database == "arena_house"
     assert cfg.clickhouse.ro_user == "arena_ro"
-    assert cfg.bedrock.region == "ap-southeast-1"
+    assert cfg.bedrock.region == "us-east-1"
     assert cfg.models, "at least one model configured"
-    assert "nova-lite" in {m.name for m in cfg.models}
+    assert {"claude", "qwen"} <= {m.family for m in cfg.models}
     assert {"P1_zeroshot", "P3_dialect"} <= {p.name for p in cfg.prompts}
     # prices are present and positive for cost computation
     assert all(m.price_per_1m_in > 0 and m.price_per_1m_out > 0 for m in cfg.models)

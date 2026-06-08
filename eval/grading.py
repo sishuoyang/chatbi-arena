@@ -31,6 +31,8 @@ def grade(agent, golden_rows, golden_cols, ordered: bool, dp: int = 4) -> int:
 def classify_outcome(agent, golden_rows, score: int) -> str:
     if score == 1:
         return "correct"
+    if agent.outcome_hint == "model_error":
+        return "model_error"
     if agent.outcome_hint == "sql_policy_rejected":
         return "sql_policy_rejected"
     if agent.outcome_hint == "sql_exec_error" or agent.error:

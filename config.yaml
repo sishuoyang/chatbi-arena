@@ -14,10 +14,12 @@ clickhouse:
     max_rows_to_read: 200000000
 
 bedrock:
-  region: ap-southeast-1
+  # us-east-1: where the open-weight / non-Amazon models live (Qwen, DeepSeek,
+  # OpenAI gpt-oss, Moonshot Kimi) alongside Claude. ClickHouse stays in Singapore.
+  region: us-east-1
   inference:
     temperature: 0.0
-    maxTokens: 1024
+    maxTokens: 2048          # headroom for reasoning models (DeepSeek-R1, gpt-oss, Kimi-thinking)
 
 langfuse:
   host: ${LANGFUSE_BASE_URL}
@@ -29,39 +31,74 @@ eval:
   default_max_retries: 1
   run_tag: "core"
 
-# Prices are illustrative ap-southeast-1 on-demand $/1M tokens — confirm before
+# Prices are illustrative us-east-1 on-demand $/1M tokens — confirm before
 # trusting absolute cost numbers (relative ranking is robust).
 models:
-  - id: apac.amazon.nova-micro-v1:0
-    name: nova-micro
-    family: nova
-    price_per_1m_in: 0.035
-    price_per_1m_out: 0.14
-  - id: apac.amazon.nova-lite-v1:0
-    name: nova-lite
-    family: nova
-    price_per_1m_in: 0.06
-    price_per_1m_out: 0.24
-  - id: apac.amazon.nova-pro-v1:0
-    name: nova-pro
-    family: nova
+  # Anthropic Claude — small / medium / large (4.5 generation)
+  - id: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    name: claude-haiku-4.5
+    family: claude
+    price_per_1m_in: 1.00
+    price_per_1m_out: 5.00
+  - id: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    name: claude-sonnet-4.5
+    family: claude
+    price_per_1m_in: 3.00
+    price_per_1m_out: 15.00
+  - id: us.anthropic.claude-opus-4-5-20251101-v1:0
+    name: claude-opus-4.5
+    family: claude
+    price_per_1m_in: 5.00
+    price_per_1m_out: 25.00
+  # Qwen (Alibaba) — small / medium / large
+  - id: qwen.qwen3-32b-v1:0
+    name: qwen3-32b
+    family: qwen
+    price_per_1m_in: 0.20
+    price_per_1m_out: 0.60
+  - id: qwen.qwen3-next-80b-a3b
+    name: qwen3-80b
+    family: qwen
+    price_per_1m_in: 0.40
+    price_per_1m_out: 1.20
+  - id: qwen.qwen3-vl-235b-a22b
+    name: qwen3-235b
+    family: qwen
     price_per_1m_in: 0.80
-    price_per_1m_out: 3.20
-  - id: apac.anthropic.claude-3-haiku-20240307-v1:0
-    name: claude-3-haiku
-    family: claude
-    price_per_1m_in: 0.25
-    price_per_1m_out: 1.25
-  - id: apac.anthropic.claude-3-5-sonnet-20241022-v2:0
-    name: claude-3.5-sonnet
-    family: claude
-    price_per_1m_in: 3.00
-    price_per_1m_out: 15.00
-  - id: apac.anthropic.claude-sonnet-4-20250514-v1:0
-    name: claude-sonnet-4
-    family: claude
-    price_per_1m_in: 3.00
-    price_per_1m_out: 15.00
+    price_per_1m_out: 2.40
+  # DeepSeek — only two available on Bedrock (no small variant)
+  - id: deepseek.v3.2
+    name: deepseek-v3.2
+    family: deepseek
+    price_per_1m_in: 0.28
+    price_per_1m_out: 0.42
+  - id: us.deepseek.r1-v1:0
+    name: deepseek-r1
+    family: deepseek
+    price_per_1m_in: 0.55
+    price_per_1m_out: 2.19
+  # OpenAI open-weight gpt-oss (NOT hosted ChatGPT) — small / large
+  - id: openai.gpt-oss-20b-1:0
+    name: gpt-oss-20b
+    family: openai
+    price_per_1m_in: 0.05
+    price_per_1m_out: 0.20
+  - id: openai.gpt-oss-120b-1:0
+    name: gpt-oss-120b
+    family: openai
+    price_per_1m_in: 0.15
+    price_per_1m_out: 0.60
+  # Moonshot Kimi — only two available, both large
+  - id: moonshotai.kimi-k2.5
+    name: kimi-k2.5
+    family: kimi
+    price_per_1m_in: 0.60
+    price_per_1m_out: 2.50
+  - id: moonshot.kimi-k2-thinking
+    name: kimi-k2-thinking
+    family: kimi
+    price_per_1m_in: 0.60
+    price_per_1m_out: 2.50
 
 prompts:
   - name: P1_zeroshot

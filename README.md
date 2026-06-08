@@ -111,7 +111,11 @@ latency, and an LLM-judge score — to ClickHouse `eval_runs` *and* LangFuse.
 ### Prerequisites
 - **Python 3.11**, **Node 18+** (for the web UI), and **Docker** (for the ClickStack collector; optional).
 - A **ClickHouse Cloud** service, a **LangFuse Cloud** project, and **AWS Bedrock**
-  access in `ap-southeast-1` with the desired models enabled (Bedrock → Model access).
+  access in **`us-east-1`** with the models enabled (Bedrock → Model access). The
+  model grid spans **Claude, Qwen, DeepSeek, OpenAI gpt-oss, and Moonshot Kimi** —
+  these non-Amazon models live in us-east-1 (not ap-southeast-1), so the agent calls
+  Bedrock there while ClickHouse stays in Singapore. (Note: hosted ChatGPT/GPT-4o is
+  not on Bedrock — `gpt-oss` is OpenAI's open-weight model.)
 - The full live pipeline also needs the **AWS** + **ClickHouse Cloud API** credentials
   to provision Aurora and the ClickPipe (see below). You can skip that and run the
   **measurement core** against ClickHouse directly.
@@ -143,7 +147,7 @@ export CH_CLOUD_KEY_SECRET=...
 ```
 AWS credentials are **not** in `.env` — use the standard AWS chain:
 ```bash
-aws sso login --profile <your-profile>       # a profile with Bedrock access in ap-southeast-1
+aws sso login --profile <your-profile>       # a profile with Bedrock access in us-east-1
 export AWS_PROFILE=<your-profile>
 ```
 
