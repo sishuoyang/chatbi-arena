@@ -4,13 +4,13 @@ import Leaderboard from './leaderboard/Leaderboard.jsx'
 import Countdown from './countdown/Countdown.jsx'
 
 const TABS = [
+  ['countdown', '⏱ Countdown'],
   ['architecture', 'Architecture'],
   ['leaderboard', 'Leaderboard'],
-  ['countdown', '⏱ Countdown'],
 ]
 
 export default function App() {
-  const [tab, setTab] = useState('architecture')
+  const [tab, setTab] = useState('countdown')
   return (
     <div className="app-shell">
       <header className="app-bar">
