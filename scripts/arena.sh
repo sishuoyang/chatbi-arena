@@ -78,7 +78,14 @@ up_full() {
   $PY scripts/setup_aurora_cdc.py
 
   log "Creating ClickPipes CDC pipe + waiting for Running"
-  $PY scripts/create_clickpipe.py --action create
+  # ClickPipes won't target existing non-empty tables. A deleted pipe leaves its
+  # landed tables behind, so reset the arena_cdc landing DB unless a pipe is live.
+  if $PY scripts/create_clickpipe.py --action status 2>/dev/null | grep -q 'state='; then
+    echo "  pipe 'arena-cdc' already exists — reusing"
+  else
+    $PY -c "from arena.config import load_config; from agents.chclient import make_admin_client; a=make_admin_client(load_config().clickhouse, database='default'); a.command('DROP DATABASE IF EXISTS arena_cdc'); a.command('CREATE DATABASE arena_cdc'); print('reset arena_cdc landing database')"
+    $PY scripts/create_clickpipe.py --action create
+  fi
   $PY scripts/create_clickpipe.py --action wait
 
   log "Repointing v_* views onto CDC tables + granting read-only"
