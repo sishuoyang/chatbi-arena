@@ -12,6 +12,9 @@ into zones, which frees the layout to minimize edge crossings.
 
 ![preview](preview.png)
 
+**Interactive:** drag any node to rearrange (the drag sticks), drag the canvas to
+pan, scroll to zoom, and use the controls / minimap (bottom-left / bottom-right).
+
 ## Run
 
 ```bash

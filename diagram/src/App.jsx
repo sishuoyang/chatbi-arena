@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap, Panel, MarkerType,
+  useNodesState, useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -22,8 +23,8 @@ const FLOW_LEGEND = [
 ]
 
 export default function App() {
-  const nodes = useMemo(() => layoutLR(componentNodes, rawEdges), [])
-  const edges = useMemo(
+  const initialNodes = useMemo(() => layoutLR(componentNodes, rawEdges), [])
+  const initialEdges = useMemo(
     () => rawEdges.map((e) => ({
       ...e,
       markerEnd: { type: MarkerType.ArrowClosed, color: e.data.color, width: 15, height: 15 },
@@ -31,11 +32,17 @@ export default function App() {
     [],
   )
 
+  // Controlled state + change handlers => nodes are draggable and the drag sticks.
+  const [nodes, , onNodesChange] = useNodesState(initialNodes)
+  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0e1116' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
