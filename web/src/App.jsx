@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import FlowDiagram from './diagram/FlowDiagram.jsx'
 import Leaderboard from './leaderboard/Leaderboard.jsx'
+import Countdown from './countdown/Countdown.jsx'
 
 const TABS = [
   ['architecture', 'Architecture'],
   ['leaderboard', 'Leaderboard'],
+  ['countdown', '⏱ Countdown'],
 ]
 
 export default function App() {
@@ -22,9 +24,12 @@ export default function App() {
         <div className="app-sub">NL→SQL agent benchmark on ClickHouse</div>
       </header>
       <main className="app-body">
-        {/* keep the diagram mounted to preserve drag positions when switching tabs */}
+        {/* diagram + countdown stay mounted (preserve drag positions / keep the timer running) */}
         <div style={{ display: tab === 'architecture' ? 'block' : 'none', height: '100%' }}>
           <FlowDiagram />
+        </div>
+        <div style={{ display: tab === 'countdown' ? 'block' : 'none', height: '100%' }}>
+          <Countdown />
         </div>
         {tab === 'leaderboard' && <Leaderboard />}
       </main>
