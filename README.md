@@ -39,6 +39,30 @@ http://localhost:5174. `up`/`down` are idempotent and use `AWS_PROFILE`
 (default `sa`); they need a valid SSO session (`aws sso login --profile sa`).
 The manual steps below are what `arena.sh` automates, for reference.
 
+## Cost to run the demo
+
+Rough estimates for **ap-southeast-1** (~mid-2026 on-demand rates; verify against
+current pricing — they vary by region/tier). The data set is tiny (~100k rows), so
+storage/I/O are negligible; the costs that matter are Aurora compute and Bedrock tokens.
+
+| Component | Cost | Notes |
+|---|---|---|
+| **Bedrock** (Converse) | **~$0.40 per full grid run** · <$0.01 per cheap-model run · ~$0.0001–0.005 per live `/ask` | Measured from the `grid-wide` run (4 models × 5 prompts × 18 Qs = 360 calls). Claude 3.5 Sonnet is ~$0.34 of that; Nova + Haiku are pennies. |
+| **Aurora PostgreSQL Serverless v2** | **~$0.07–0.14 / hour** running | 0.5–2 ACU @ ~$0.12–0.14/ACU-hr; mostly idle at min capacity. The main "left running" cost (~$1.5–3/day). |
+| **ClickPipes CDC + ClickHouse Cloud** | small while running | Metered by ClickHouse Cloud (pipe compute + ingested data); minor for this dataset. Your ClickHouse service has its own baseline (scales to zero when idle on Cloud) — not created by the demo. |
+| **LangFuse Cloud** | **$0** | Free tier covers a few hundred traces per run. |
+| **ClickStack OTel collector** | **$0** | Local Docker container; writes into your existing ClickHouse service (storage negligible). |
+| **Local** (data-gen, harness, serving, web UI) | **$0** | Runs on your machine. |
+
+**Summary.** A full end-to-end demo — `arena.sh up`, one complete benchmark grid,
+browse the UI, then `arena.sh down` — within ~2 hours runs about **$1–2 total**,
+dominated by one Bedrock grid (~$0.40, mostly the Sonnet configs) plus a couple of
+Aurora compute-hours (~$0.15–0.30). The **measurement-core-only** path
+(`up --seed-only`, one cheap model, no Aurora/CDC) is **under $0.05**.
+
+The biggest avoidable cost is leaving **Aurora + the ClickPipe running** after the
+demo (~$1.5–3/day) — always finish with `scripts/arena.sh down`.
+
 ## Quickstart
 
 ```bash
