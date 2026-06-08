@@ -8,13 +8,21 @@ A single [React](https://react.dev) ([Vite](https://vite.dev)) SPA with two tabs
   component runs (legend top-right). Edge labels are short so they don't cover the
   arrows — **hover an edge label** to see the full description. Nodes are
   draggable; drag the canvas to pan, scroll to zoom.
-- **Leaderboard** — the benchmark results, fetched live from the FastAPI
-  dashboard API (`dashboard/app.py`) which reads the `arena.eval_runs` /
-  `v_leaderboard` tables in ClickHouse. Run selector, winner cards, sortable
-  leaderboard, per-tier accuracy heatmap, and outcome breakdown.
+- **Leaderboard** — the benchmark results from ClickHouse (`v_leaderboard`),
+  with run selector, winner cards, sortable leaderboard, per-tier heatmap, and
+  outcome breakdown — plus the **LangFuse-powered** layer:
+  - an **LLM-judge** column (a Bedrock-scored SQL-quality dimension, stored as a
+    LangFuse score and in `eval_runs`);
+  - **click any config row** to drill into its per-question results, each linking
+    to its **LangFuse trace** (prompt → SQL → error → span timings → tokens);
+  - **“View conversation (LangFuse)”** loads the config's session **live from the
+    LangFuse API** and renders the full multi-turn conversation in-app;
+  - **session ↗** and **Open experiment in LangFuse ↗** deep-link to LangFuse's
+    native session + Dataset/Experiment comparison views.
 
 ![architecture tab](preview.png)
-![leaderboard tab](preview-leaderboard.png)
+![leaderboard drill-down](preview-leaderboard.png)
+![conversation from LangFuse](preview-conversation.png)
 
 Diagram layout is computed by **dagre** (layered left→right with crossing
 minimization); edges use orthogonal smoothstep routing.

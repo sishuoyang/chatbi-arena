@@ -49,11 +49,12 @@ _MIGRATIONS = [
 ]
 
 _LEADERBOARD = """
-CREATE VIEW IF NOT EXISTS {db}.v_leaderboard AS
+CREATE OR REPLACE VIEW {db}.v_leaderboard AS
 SELECT run_id, config_id, model_name, prompt_name,
        count() AS n_questions,
        round(avg(correctness), 4) AS accuracy,
        sum(correctness) AS n_correct,
+       round(avg(judge_score), 3) AS avg_judge_score,
        round(sum(cost_usd), 6) AS total_cost_usd,
        round(avg(cost_usd), 6) AS avg_cost_usd,
        round(avg(latency_ms), 1) AS avg_latency_ms,

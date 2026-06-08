@@ -14,16 +14,23 @@ export default function Leaderboard() {
   const [board, setBoard] = useState([])
   const [tiers, setTiers] = useState([])
   const [outcomes, setOutcomes] = useState([])
+  const [meta, setMeta] = useState({})
   const [sort, setSort] = useState({ key: 'accuracy', dir: -1 })
   const [error, setError] = useState(null)
+
+  const [expanded, setExpanded] = useState(null)   // config_id whose drill-down is open
+  const [details, setDetails] = useState({})       // config_id -> per-question rows
+  const [conv, setConv] = useState(null)           // {config_id, loading, exchanges}
 
   useEffect(() => {
     api('/api/runs').then((r) => { setRuns(r); if (r.length) setRun(r[0]) })
       .catch((e) => setError(String(e)))
+    api('/api/meta').then(setMeta).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (!run) return
+    setExpanded(null); setConv(null); setDetails({})
     const q = `?run_id=${encodeURIComponent(run)}`
     Promise.all([api('/api/leaderboard' + q), api('/api/tiers' + q), api('/api/outcomes' + q)])
       .then(([b, t, o]) => { setBoard(b); setTiers(t); setOutcomes(o); setError(null) })
@@ -39,30 +46,43 @@ export default function Leaderboard() {
   const best = Math.max(...board.map((r) => Number(r.accuracy)), 0)
   const winner = board.find((r) => Number(r.accuracy) === best) || {}
   const totalGraded = board.reduce((s, r) => s + Number(r.n_questions), 0)
+  const lfBase = meta.langfuse_base
+  const sessionUrl = (cfg) => lfBase && `${lfBase}/sessions/${encodeURIComponent(run + '__' + cfg)}`
 
-  const tierKeys = [...new Set(tiers.map((t) => t.tier))].sort()
-  const tierConfigs = [...new Set(tiers.map((t) => t.config_id))]
-  const tierMap = Object.fromEntries(tiers.map((t) => [t.config_id + '|' + t.tier, t.accuracy]))
+  const toggleSort = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))
 
-  const byCfg = {}
-  outcomes.forEach((r) => { (byCfg[r.config_id] = byCfg[r.config_id] || {})[r.outcome] = Number(r.n) })
-  const outcomeKinds = [...new Set(outcomes.map((o) => o.outcome))]
+  async function toggleExpand(cfg) {
+    if (expanded === cfg) { setExpanded(null); return }
+    setExpanded(cfg); setConv(null)
+    if (!details[cfg]) {
+      const rows = await api(`/api/questions?run_id=${encodeURIComponent(run)}&config_id=${encodeURIComponent(cfg)}`)
+      setDetails((d) => ({ ...d, [cfg]: rows }))
+    }
+  }
 
-  const toggleSort = (key) =>
-    setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))
+  async function openConversation(cfg) {
+    setConv({ config_id: cfg, loading: true, exchanges: [] })
+    try {
+      const r = await api(`/api/lf/session?session_id=${encodeURIComponent(run + '__' + cfg)}`)
+      setConv({ config_id: cfg, loading: false, exchanges: r.exchanges || [] })
+    } catch (e) {
+      setConv({ config_id: cfg, loading: false, error: String(e), exchanges: [] })
+    }
+  }
 
   if (error) {
     return (
       <div className="lb-error">
         <b>Can't reach the dashboard API at {API_BASE}.</b>
         <div>{error}</div>
-        <div className="lb-hint">
-          Start it: <code>source .env &amp;&amp; uvicorn dashboard.app:app --port 8000</code>
-          {' '}(or set <code>VITE_API_BASE</code>).
-        </div>
+        <div className="lb-hint">Start it: <code>source .env &amp;&amp; uvicorn dashboard.app:app --port 8000</code></div>
       </div>
     )
   }
+
+  const COLS = [['config_id', 'Config'], ['n_questions', '# Q'], ['accuracy', 'Accuracy'],
+    ['n_correct', 'Correct'], ['avg_judge_score', 'LLM judge'], ['total_cost_usd', 'Total $'],
+    ['avg_latency_ms', 'Avg latency'], ['cost_per_correct_answer', '$ / correct']]
 
   return (
     <div className="lb-wrap">
@@ -71,8 +91,11 @@ export default function Leaderboard() {
         <select value={run || ''} onChange={(e) => setRun(e.target.value)}>
           {runs.map((r) => <option key={r}>{r}</option>)}
         </select>
-        {run && run.startsWith('mock') && (
-          <span className="lb-mock">synthetic data — pending Bedrock access</span>
+        {run && run.startsWith('mock') && <span className="lb-mock">synthetic data</span>}
+        {meta.datasets_url && (
+          <a className="lb-extlink" href={meta.datasets_url} target="_blank" rel="noreferrer">
+            Open experiment in LangFuse ↗
+          </a>
         )}
       </div>
 
@@ -80,57 +103,138 @@ export default function Leaderboard() {
         <div className="lb-card win"><div className="k">Winner</div><div className="v">{winner.config_id || '—'}</div></div>
         <div className="lb-card"><div className="k">Best accuracy</div><div className="v mono">{winner.accuracy != null ? pct(winner.accuracy) : '—'}</div></div>
         <div className="lb-card"><div className="k">Cost / correct (winner)</div><div className="v mono">{money(winner.cost_per_correct_answer)}</div></div>
-        <div className="lb-card"><div className="k">Configs × answers</div><div className="v mono">{board.length} <small>× {totalGraded} graded</small></div></div>
+        <div className="lb-card"><div className="k">Configs × answers</div><div className="v mono">{board.length} <small>× {totalGraded}</small></div></div>
       </div>
 
-      <h2>Leaderboard — sorted by accuracy, then cost per correct</h2>
+      <h2>Leaderboard — click a row to drill into per-question LangFuse traces</h2>
       <table className="lb-table">
-        <thead>
-          <tr>
-            {[['config_id', 'Config'], ['n_questions', '# Q'], ['accuracy', 'Accuracy'],
-              ['n_correct', 'Correct'], ['total_cost_usd', 'Total $'],
-              ['avg_latency_ms', 'Avg latency'], ['cost_per_correct_answer', '$ / correct']]
-              .map(([k, label]) => (
-                <th key={k} onClick={() => toggleSort(k)}
-                  className={k === 'config_id' ? 'left' : ''}>{label}</th>
-              ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sortedBoard.map((r) => (
-            <tr key={r.config_id} className={Number(r.accuracy) === best ? 'win' : ''}>
-              <td className="left">{r.config_id}{Number(r.accuracy) === best && <span className="pill">WIN</span>}</td>
-              <td className="mono">{r.n_questions}</td>
-              <td className="mono">{pct(r.accuracy)}</td>
-              <td className="mono">{r.n_correct}</td>
-              <td className="mono">${Number(r.total_cost_usd).toFixed(5)}</td>
-              <td className="mono">{Math.round(r.avg_latency_ms)} ms</td>
-              <td className="mono">{money(r.cost_per_correct_answer)}</td>
-            </tr>
+        <thead><tr>
+          <th className="left" style={{ width: 18 }}></th>
+          {COLS.map(([k, label]) => (
+            <th key={k} onClick={() => toggleSort(k)} className={k === 'config_id' ? 'left' : ''}>{label}</th>
           ))}
+        </tr></thead>
+        <tbody>
+          {sortedBoard.map((r) => {
+            const isWin = Number(r.accuracy) === best
+            const open = expanded === r.config_id
+            return (
+              <FragmentRow key={r.config_id}>
+                <tr className={isWin ? 'win clickrow' : 'clickrow'} onClick={() => toggleExpand(r.config_id)}>
+                  <td className="left mono">{open ? '▾' : '▸'}</td>
+                  <td className="left">{r.config_id}{isWin && <span className="pill">WIN</span>}</td>
+                  <td className="mono">{r.n_questions}</td>
+                  <td className="mono">{pct(r.accuracy)}</td>
+                  <td className="mono">{r.n_correct}</td>
+                  <td className="mono">{r.avg_judge_score != null ? (r.avg_judge_score * 100).toFixed(0) + '%' : '—'}</td>
+                  <td className="mono">${Number(r.total_cost_usd).toFixed(5)}</td>
+                  <td className="mono">{Math.round(r.avg_latency_ms)} ms</td>
+                  <td className="mono">{money(r.cost_per_correct_answer)}</td>
+                </tr>
+                {open && (
+                  <tr className="lb-detailrow">
+                    <td colSpan={COLS.length + 1}>
+                      <div className="lb-detail">
+                        <div className="lb-detail-bar">
+                          <span>per-question results — “trace ↗” opens the LangFuse trace</span>
+                          <span className="lb-detail-actions">
+                            {sessionUrl(r.config_id) && <a href={sessionUrl(r.config_id)} target="_blank" rel="noreferrer">session ↗</a>}
+                            <button onClick={() => openConversation(r.config_id)}>View conversation (LangFuse)</button>
+                          </span>
+                        </div>
+                        <table className="lb-qtable">
+                          <thead><tr>
+                            <th className="left">Q</th><th>tier</th><th></th><th>judge</th>
+                            <th>latency</th><th>outcome</th><th className="left">trace</th>
+                          </tr></thead>
+                          <tbody>
+                            {(details[r.config_id] || []).map((q) => (
+                              <tr key={q.question_id}>
+                                <td className="left mono">{q.question_id}</td>
+                                <td className="mono">{q.tier}</td>
+                                <td className="mono">{q.correctness ? '✓' : '✗'}</td>
+                                <td className="mono">{(q.judge_score * 100).toFixed(0)}%</td>
+                                <td className="mono">{q.latency_ms} ms</td>
+                                <td><span className="ob-tag" style={{ background: OB_COLORS[q.outcome] || '#888' }}>{q.outcome}</span></td>
+                                <td className="left">{q.trace_url ? <a href={q.trace_url} target="_blank" rel="noreferrer">trace ↗</a> : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        {conv && conv.config_id === r.config_id && (
+                          <div className="lb-conv">
+                            <div className="lb-conv-head">Conversation history — fetched live from the LangFuse API{conv.loading && ' …loading'}</div>
+                            {conv.error && <div className="lb-hint">{conv.error}</div>}
+                            {conv.exchanges.map((ex) => (
+                              <details key={ex.question_id} className="lb-ex">
+                                <summary>
+                                  <b>{ex.question_id}</b> — {ex.question}
+                                  <span className="ob-tag" style={{ background: OB_COLORS[ex.outcome] || '#888' }}>{ex.outcome}</span>
+                                </summary>
+                                <div className="lb-turns">
+                                  {ex.turns.filter((t) => t.role !== 'system').map((t, i) => (
+                                    <div key={i} className={`bubble ${t.role}`}>
+                                      <span className="role">{t.role}</span>
+                                      <pre>{t.content}</pre>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </FragmentRow>
+            )
+          })}
         </tbody>
       </table>
 
       <h2>Accuracy by difficulty tier</h2>
-      <table className="lb-table heat">
-        <thead>
-          <tr><th className="left">Config</th>{tierKeys.map((t) => <th key={t}>Tier {t}</th>)}</tr>
-        </thead>
-        <tbody>
-          {tierConfigs.map((c) => (
-            <tr key={c}>
-              <td className="left">{c}</td>
-              {tierKeys.map((t) => {
-                const a = tierMap[c + '|' + t]
-                const bg = a == null ? 'transparent' : `rgba(63,185,80,${0.15 + 0.6 * a})`
-                return <td key={t} className="mono" style={{ background: bg }}>{a == null ? '—' : pct(a)}</td>
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <TierHeat tiers={tiers} />
 
       <h2>Outcome breakdown</h2>
+      <Outcomes outcomes={outcomes} />
+    </div>
+  )
+}
+
+// React fragment that can hold two <tr> siblings with one key
+function FragmentRow({ children }) { return <>{children}</> }
+
+function TierHeat({ tiers }) {
+  const keys = [...new Set(tiers.map((t) => t.tier))].sort()
+  const configs = [...new Set(tiers.map((t) => t.config_id))]
+  const map = Object.fromEntries(tiers.map((t) => [t.config_id + '|' + t.tier, t.accuracy]))
+  return (
+    <table className="lb-table heat">
+      <thead><tr><th className="left">Config</th>{keys.map((t) => <th key={t}>Tier {t}</th>)}</tr></thead>
+      <tbody>
+        {configs.map((c) => (
+          <tr key={c}>
+            <td className="left">{c}</td>
+            {keys.map((t) => {
+              const a = map[c + '|' + t]
+              const bg = a == null ? 'transparent' : `rgba(63,185,80,${0.15 + 0.6 * a})`
+              return <td key={t} className="mono" style={{ background: bg }}>{a == null ? '—' : (a * 100).toFixed(0) + '%'}</td>
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function Outcomes({ outcomes }) {
+  const byCfg = {}
+  outcomes.forEach((r) => { (byCfg[r.config_id] = byCfg[r.config_id] || {})[r.outcome] = Number(r.n) })
+  const kinds = [...new Set(outcomes.map((o) => o.outcome))]
+  return (
+    <>
       {Object.keys(byCfg).map((c) => {
         const tot = Object.values(byCfg[c]).reduce((a, b) => a + b, 0)
         return (
@@ -145,10 +249,8 @@ export default function Leaderboard() {
         )
       })}
       <div className="lb-legend">
-        {outcomeKinds.map((k) => (
-          <span key={k}><i style={{ background: OB_COLORS[k] || '#888' }} />{k}</span>
-        ))}
+        {kinds.map((k) => <span key={k}><i style={{ background: OB_COLORS[k] || '#888' }} />{k}</span>)}
       </div>
-    </div>
+    </>
   )
 }
