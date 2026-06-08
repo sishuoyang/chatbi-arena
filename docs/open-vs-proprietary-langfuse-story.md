@@ -127,9 +127,15 @@ make it concrete — the slowest calls in the whole run:
 | Kimi-K2-thinking | q016 (P5) | 27.0 s | wrong_result |
 | DeepSeek-R1 | q018 (P5) | 24.2 s | sql_policy_rejected |
 
-Open the trace and the **generation span** shows why: the output is dominated by
-chain-of-thought tokens before any SQL appears. For a single-statement analytics query,
-that "thinking" bought no accuracy here — just 10–20× the latency and cost of Qwen/Claude.
+Open the trace and the **generation span's numbers** tell the story: that q018 call
+burned **3,993 completion tokens** over **37.6 s** to emit a ~12-line SQL query. A query
+that short is only ~150–200 tokens — so **~3,800 tokens were the model's hidden reasoning**.
+You don't read the chain-of-thought *text* in the trace (the agent logs only the final
+extracted SQL, and Bedrock returns reasoning models' thinking in a separate
+`reasoningContent` block we don't capture) — but the **completion-token count and latency
+are the smoking gun**: ~20× the tokens and ~20× the wall-clock of the same question on
+Qwen, for *no* accuracy gain. (To surface the verbatim reasoning in the trace, capture
+Bedrock's `reasoningContent` block and log it on the generation — a small agent enhancement.)
 
 Worse, reasoning models are **format-fragile**. Several DeepSeek-R1 and Kimi attempts came
 back `sql_policy_rejected` ([e.g. Kimi q015, 15.5 s](https://us.cloud.langfuse.com/project/cmq1yepps03v0ad0du2ba9qa9/traces/e7f12a41-a4ac-5241-950e-4dac9ba83257)). The **"View conversation"** panel (read live from the LangFuse
