@@ -151,13 +151,111 @@ _run_lock = threading.Lock()
 
 @app.get("/api/grid-options")
 def grid_options():
-    """Models + prompts available to run (from config.yaml), with descriptions for hovers."""
+    """Prompts available to run (from config.yaml), with descriptions for hovers.
+    Models now come from the live catalog endpoint /api/bedrock-models."""
     return {
-        "models": [{"name": m.name,
-                    "desc": f"{m.family} · ${m.price_per_1m_in:g}/${m.price_per_1m_out:g} per 1M tokens (in/out)"}
-                   for m in _cfg.models],
         "prompts": [{"name": p.name, "desc": p.desc or p.name} for p in _cfg.prompts],
     }
+
+
+# --- Live Bedrock model catalog -------------------------------------------------
+import re as _re
+
+_catalog_cache = None
+_SKIP = _re.compile(r"embed|rerank|guard|image|video|canvas|reel|stable|stability|"
+                    r"titan-(image|text)|nova-(canvas|reel)|voxtral|whisper", _re.I)
+
+
+def _size_hint(model_id: str) -> str:
+    m = _re.search(r"(\d+(?:\.\d+)?)\s*b\b", model_id, _re.I)
+    if m:
+        return f"{m.group(1)}B"
+    for k, v in [("haiku", "small"), ("micro", "small"), ("mini", "small"), ("lite", "small"),
+                 ("sonnet", "medium"), ("pro", "large"), ("opus", "large"), ("large", "large"),
+                 ("small", "small"), ("medium", "medium")]:
+        if k in model_id.lower():
+            return v
+    return ""
+
+
+def _invocable_id(model_id: str, infer_types: list[str], profiles: list[str]) -> str | None:
+    if "ON_DEMAND" in infer_types:
+        return model_id
+    # else needs an inference profile: prefer us. then global. then apac.
+    for pref in ("us.", "global.", "apac."):
+        cand = pref + model_id
+        if cand in profiles:
+            return cand
+    # some profiles end with the model id but carry a version suffix; match by suffix
+    for p in profiles:
+        if p.split(".", 1)[-1] == model_id:
+            return p
+    return None
+
+
+@app.get("/api/bedrock-models")
+def bedrock_models():
+    """All text models available in the configured Bedrock region, grouped by
+    provider/family, with the invocable id, a size hint, and whether they're in
+    the priced config (the defaults)."""
+    global _catalog_cache
+    if _catalog_cache is not None:
+        return _catalog_cache
+    import boto3
+    bc = boto3.client("bedrock", region_name=_cfg.bedrock.region)
+    profiles = [p["inferenceProfileId"]
+                for p in bc.list_inference_profiles().get("inferenceProfileSummaries", [])]
+    priced = {m.id: m for m in _cfg.models}
+    default_ids = set(priced)
+
+    fams = {}
+    for m in bc.list_foundation_models(byOutputModality="TEXT").get("modelSummaries", []):
+        mid = m["modelId"]
+        if _SKIP.search(mid):
+            continue
+        if "TEXT" not in m.get("inputModalities", []) or "TEXT" not in m.get("outputModalities", []):
+            continue
+        inv = _invocable_id(mid, m.get("inferenceTypesSupported", []) or [], profiles)
+        if not inv:
+            continue
+        fam = m.get("providerName", "Other")
+        cfg_m = priced.get(inv)
+        # friendly, collision-free name: drop provider prefix + version, dots→hyphens
+        nm = mid.split(":")[0]
+        parts = nm.split(".")
+        nm = ".".join(parts[1:]) if len(parts) > 1 else nm
+        fams.setdefault(fam, []).append({
+            "id": inv,
+            "name": cfg_m.name if cfg_m else nm.replace(".", "-"),
+            "family": fam,
+            "size": _size_hint(mid),
+            "in_default": inv in default_ids,
+            "price_in": cfg_m.price_per_1m_in if cfg_m else 0.0,
+            "price_out": cfg_m.price_per_1m_out if cfg_m else 0.0,
+        })
+    # de-dup by invocable id within a family; sort families with our defaults first
+    default_fams = [m.family for m in _cfg.models]
+    order = {f: i for i, f in enumerate(dict.fromkeys(default_fams))}
+    out = []
+    for fam in sorted(fams, key=lambda f: (order.get(_family_key(f, _cfg), 99), f)):
+        seen, models = set(), []
+        for mm in sorted(fams[fam], key=lambda x: x["id"]):
+            if mm["id"] in seen:
+                continue
+            seen.add(mm["id"]); models.append(mm)
+        out.append({"family": fam, "models": models})
+    _catalog_cache = {"region": _cfg.bedrock.region, "families": out,
+                      "default_ids": sorted(default_ids)}
+    return _catalog_cache
+
+
+def _family_key(provider_name: str, cfg) -> str:
+    # map provider display name -> config family tag so defaults sort first
+    pl = provider_name.lower()
+    for fam in {m.family for m in cfg.models}:
+        if fam in pl:
+            return fam
+    return provider_name
 
 
 def _stream_harness(cmd: list[str]):
@@ -183,8 +281,19 @@ def start_run(body: dict):
                     "run_id": _run_state["run_id"]}
         run_id = body.get("run_id") or f"ui-{int(time.time())}"
         cmd = [sys.executable, "-m", "eval.harness", "--run-id", run_id]
-        if body.get("models"):
-            cmd += ["--models", ",".join(body["models"])]
+        models = body.get("models") or []
+        if models and isinstance(models[0], dict):
+            # full specs from the live-catalog browser → temp models-file
+            import json
+            specs = [{"id": m["id"], "name": m["name"], "family": m.get("family", "other"),
+                      "price_per_1m_in": float(m.get("price_in") or 0),
+                      "price_per_1m_out": float(m.get("price_out") or 0)} for m in models]
+            (_ROOT / ".run").mkdir(exist_ok=True)
+            mf = _ROOT / ".run" / f"models-{run_id}.json"
+            mf.write_text(json.dumps(specs))
+            cmd += ["--models-file", str(mf)]
+        elif models:
+            cmd += ["--models", ",".join(models)]
         if body.get("prompts"):
             cmd += ["--prompts", ",".join(body["prompts"])]
         if body.get("limit"):

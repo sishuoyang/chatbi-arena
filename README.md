@@ -190,8 +190,11 @@ scripts/arena.sh down [--purge]     # tear down infra (+ optionally drop ClickHo
 
 ### Running the benchmark
 
-**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → pick which
-**models** and **prompts** to benchmark, **name the run**, **Run**. The dashboard API
+**From the web UI (easiest):** Leaderboard tab → **▶ Run benchmark** → **browse the
+live Bedrock catalog** (every text model in the region, filterable by family), tick
+the models to put in the arena (the `config.yaml` set is pre-selected as defaults),
+pick **prompts**, **name the run**, **Run**. Models you add that aren't in
+`config.yaml` have no price, so their cost shows as $0 (accuracy/latency/judge still work). The dashboard API
 spawns the harness server-side, streams progress, and auto-selects the new run when
 done. The **Run dropdown** lists past runs (each is one named execution) — pick one to
 view its results. (The API process must have AWS Bedrock creds — start it with

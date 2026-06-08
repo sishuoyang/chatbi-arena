@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Tooltip } from 'react-tooltip'
+import 'react-tooltip/dist/react-tooltip.css'
 import { api, API_BASE } from '../api.js'
 
 const OB_COLORS = {
@@ -30,30 +32,36 @@ export default function Leaderboard() {
 
   const [expanded, setExpanded] = useState(null)
   const [details, setDetails] = useState({})
-  const [conv, setConv] = useState(null)             // {config_id, loading, exchanges}
-  const [turns, setTurns] = useState({})             // trace_id -> [{role,content}]
+  const [conv, setConv] = useState(null)
+  const [turns, setTurns] = useState({})
 
   // run-from-UI
-  const [opts, setOpts] = useState({ models: [], prompts: [] })
   const [showRun, setShowRun] = useState(false)
-  const [selM, setSelM] = useState(new Set())
+  const [catalog, setCatalog] = useState(null)        // {families:[{family,models}], default_ids}
+  const [famFilter, setFamFilter] = useState('All')
+  const [selModels, setSelModels] = useState({})      // id -> spec
+  const [prompts, setPrompts] = useState([])
   const [selP, setSelP] = useState(new Set())
   const [judge, setJudge] = useState(true)
   const [runName, setRunName] = useState('')
-  const [runStatus, setRunStatus] = useState(null)   // {running, run_id, lines, returncode}
+  const [runStatus, setRunStatus] = useState(null)
   const pollRef = useRef(null)
 
   function loadRuns(select) {
-    return api('/api/runs').then((r) => { setRuns(r); if (select) setRun(select); else if (r.length && !run) setRun(r[0]) })
+    return api('/api/runs').then((r) => {
+      setRuns(r); if (select) setRun(select); else if (r.length && !run) setRun(r[0])
+    })
   }
 
   useEffect(() => {
     loadRuns().catch((e) => setError(String(e)))
     api('/api/meta').then(setMeta).catch(() => {})
-    api('/api/grid-options').then((o) => {
-      setOpts(o)
-      setSelM(new Set(o.models.map((m) => m.name)))
-      setSelP(new Set(o.prompts.map((p) => p.name)))
+    api('/api/grid-options').then((o) => { setPrompts(o.prompts); setSelP(new Set(o.prompts.map((p) => p.name))) }).catch(() => {})
+    api('/api/bedrock-models').then((c) => {
+      setCatalog(c)
+      const def = {}
+      c.families.forEach((f) => f.models.forEach((m) => { if (m.in_default) def[m.id] = m }))
+      setSelModels(def)
     }).catch(() => {})
     return () => clearTimeout(pollRef.current)
   }, [])
@@ -94,9 +102,7 @@ export default function Leaderboard() {
     try {
       const r = await api(`/api/lf/session?session_id=${encodeURIComponent(run + '__' + cfg)}`)
       setConv({ config_id: cfg, loading: false, exchanges: r.exchanges || [] })
-    } catch (e) {
-      setConv({ config_id: cfg, loading: false, error: String(e), exchanges: [] })
-    }
+    } catch (e) { setConv({ config_id: cfg, loading: false, error: String(e), exchanges: [] }) }
   }
 
   async function loadTurns(traceId) {
@@ -107,27 +113,32 @@ export default function Leaderboard() {
     } catch { /* ignore */ }
   }
 
-  // ---- run from UI ----
+  function toggleModel(m) {
+    setSelModels((s) => { const n = { ...s }; if (n[m.id]) delete n[m.id]; else n[m.id] = m; return n })
+  }
+  const families = catalog ? catalog.families : []
+  const shownModels = famFilter === 'All'
+    ? families.flatMap((f) => f.models)
+    : (families.find((f) => f.family === famFilter)?.models || [])
+  const selCount = Object.keys(selModels).length
+
   function pollStatus() {
     api('/api/run/status').then((s) => {
       setRunStatus(s)
-      if (s.running) { pollRef.current = setTimeout(pollStatus, 1500) }
-      else if (s.run_id) { loadRuns(s.run_id) }   // done -> select the new run
+      if (s.running) pollRef.current = setTimeout(pollStatus, 1500)
+      else if (s.run_id) loadRuns(s.run_id)
     }).catch(() => { pollRef.current = setTimeout(pollStatus, 2500) })
   }
-
   async function startRun() {
     try {
       const r = await post('/api/run', {
-        models: [...selM], prompts: [...selP], judge,
+        models: Object.values(selModels), prompts: [...selP], judge,
         run_id: runName.trim() || undefined,
       })
       if (!r.ok) { setRunStatus({ running: false, lines: ['⚠ ' + (r.error || 'failed to start')] }); return }
       setRunStatus({ running: true, run_id: r.run_id, lines: ['starting…'] })
       clearTimeout(pollRef.current); pollRef.current = setTimeout(pollStatus, 1200)
-    } catch (e) {
-      setRunStatus({ running: false, lines: ['⚠ ' + String(e)] })
-    }
+    } catch (e) { setRunStatus({ running: false, lines: ['⚠ ' + String(e)] }) }
   }
 
   if (error) {
@@ -147,6 +158,7 @@ export default function Leaderboard() {
 
   return (
     <div className="lb-wrap">
+      <Tooltip id="tip" delayShow={0} delayHide={0} className="arena-tt" />
       <div className="lb-controls">
         <label className="lb-dim">Run</label>
         <select value={run || ''} onChange={(e) => setRun(e.target.value)}>
@@ -154,50 +166,59 @@ export default function Leaderboard() {
         </select>
         <button className="lb-runbtn" onClick={() => setShowRun((v) => !v)}>▶ Run benchmark</button>
         {meta.datasets_url && (
-          <a className="lb-extlink" href={meta.datasets_url} target="_blank" rel="noreferrer">
-            Open experiment in LangFuse ↗
-          </a>
+          <a className="lb-extlink" href={meta.datasets_url} target="_blank" rel="noreferrer">Open experiment in LangFuse ↗</a>
         )}
       </div>
 
       {showRun && (
         <div className="lb-runpanel">
-          <div className="lb-runcols">
-            <div>
-              <div className="lb-runhead">Models</div>
-              {opts.models.map((m) => (
-                <label key={m.name} className="lb-chk" title={m.desc}>
-                  <input type="checkbox" checked={selM.has(m.name)}
-                    onChange={() => setSelM((s) => toggle(s, m.name))} />
-                  <span className="hashint">{m.name}</span>
-                </label>
-              ))}
-            </div>
+          <div className="lb-runhead">Build the arena — {catalog ? `${catalog.families.reduce((n, f) => n + f.models.length, 0)} models live in ${catalog.region}` : 'loading models…'} · {selCount} selected</div>
+          <div className="lb-fams">
+            <button className={famFilter === 'All' ? 'fam on' : 'fam'} onClick={() => setFamFilter('All')}>All</button>
+            {families.map((f) => (
+              <button key={f.family} className={famFilter === f.family ? 'fam on' : 'fam'}
+                onClick={() => setFamFilter(f.family)}>{f.family} ({f.models.length})</button>
+            ))}
+          </div>
+          <div className="lb-modelgrid">
+            {shownModels.map((m) => (
+              <label key={m.id} className={selModels[m.id] ? 'mcard on' : 'mcard'}
+                data-tooltip-id="tip"
+                data-tooltip-content={`${m.id}  ·  ${m.price_in ? `$${m.price_in}/$${m.price_out} per 1M` : 'no price set → cost shown as $0'}`}>
+                <input type="checkbox" checked={!!selModels[m.id]} onChange={() => toggleModel(m)} />
+                <span className="mname">{m.name}</span>
+                {m.size && <span className="msize">{m.size}</span>}
+                {famFilter === 'All' && <span className="mfam">{m.family}</span>}
+              </label>
+            ))}
+          </div>
+
+          <div className="lb-runcols2">
             <div>
               <div className="lb-runhead">Prompts</div>
-              {opts.prompts.map((p) => (
-                <label key={p.name} className="lb-chk" title={p.desc}>
-                  <input type="checkbox" checked={selP.has(p.name)}
-                    onChange={() => setSelP((s) => toggle(s, p.name))} />
+              {prompts.map((p) => (
+                <label key={p.name} className="lb-chk" data-tooltip-id="tip" data-tooltip-content={p.desc}>
+                  <input type="checkbox" checked={selP.has(p.name)} onChange={() => setSelP((s) => toggle(s, p.name))} />
                   <span className="hashint">{p.name}</span>
                 </label>
               ))}
             </div>
             <div className="lb-runside">
               <div className="lb-runhead">Run name</div>
-              <input className="lb-runname" placeholder="e.g. sonnet-vs-nova"
-                value={runName}
+              <input className="lb-runname" placeholder="e.g. sonnet-vs-qwen" value={runName}
                 onChange={(e) => setRunName(e.target.value.replace(/[^A-Za-z0-9._-]/g, '-'))} />
               <label className="lb-chk" style={{ marginTop: '.5rem' }}>
                 <input type="checkbox" checked={judge} onChange={() => setJudge((v) => !v)} />LLM judge
               </label>
               <div className="lb-dim" style={{ margin: '.4rem 0' }}>
-                {selM.size}×{selP.size} configs × 18 Qs = {selM.size * selP.size * 18} agent calls
+                {selCount}×{selP.size} configs × 18 Qs = {selCount * selP.size * 18} agent calls
               </div>
-              <button className="lb-runbtn primary" disabled={running || !selM.size || !selP.size}
-                onClick={startRun}>{running ? 'running…' : 'Run'}</button>
+              <button className="lb-runbtn primary" disabled={running || !selCount || !selP.size} onClick={startRun}>
+                {running ? 'running…' : 'Run'}
+              </button>
             </div>
           </div>
+
           {runStatus && (
             <div className="lb-runlog">
               <div className="lb-dim">{running ? `running ${runStatus.run_id}…`
@@ -220,9 +241,7 @@ export default function Leaderboard() {
       <table className="lb-table">
         <thead><tr>
           <th className="left" style={{ width: 18 }}></th>
-          {COLS.map(([k, label]) => (
-            <th key={k} onClick={() => toggleSort(k)} className={k === 'config_id' ? 'left' : ''}>{label}</th>
-          ))}
+          {COLS.map(([k, label]) => (<th key={k} onClick={() => toggleSort(k)} className={k === 'config_id' ? 'left' : ''}>{label}</th>))}
         </tr></thead>
         <tbody>
           {sortedBoard.map((r) => {
@@ -253,10 +272,7 @@ export default function Leaderboard() {
                           </span>
                         </div>
                         <table className="lb-qtable">
-                          <thead><tr>
-                            <th className="left">Q</th><th>tier</th><th></th><th>judge</th>
-                            <th>latency</th><th>outcome</th><th className="left">trace</th>
-                          </tr></thead>
+                          <thead><tr><th className="left">Q</th><th>tier</th><th></th><th>judge</th><th>latency</th><th>outcome</th><th className="left">trace</th></tr></thead>
                           <tbody>
                             {(details[r.config_id] || []).map((q) => (
                               <tr key={q.question_id}>
@@ -271,24 +287,17 @@ export default function Leaderboard() {
                             ))}
                           </tbody>
                         </table>
-
                         {conv && conv.config_id === r.config_id && (
                           <div className="lb-conv">
                             <div className="lb-conv-head">Conversation history — fetched from the LangFuse API{conv.loading && ' …loading'}</div>
                             {conv.error && <div className="lb-hint">{conv.error}</div>}
                             {conv.exchanges.map((ex) => (
-                              <details key={ex.question_id} className="lb-ex"
-                                onToggle={(e) => e.target.open && loadTurns(ex.trace_id)}>
-                                <summary>
-                                  <b>{ex.question_id}</b> — {ex.question}
-                                  <span className="ob-tag" style={{ background: OB_COLORS[ex.outcome] || '#888' }}>{ex.outcome}</span>
-                                </summary>
+                              <details key={ex.question_id} className="lb-ex" onToggle={(e) => e.target.open && loadTurns(ex.trace_id)}>
+                                <summary><b>{ex.question_id}</b> — {ex.question}
+                                  <span className="ob-tag" style={{ background: OB_COLORS[ex.outcome] || '#888' }}>{ex.outcome}</span></summary>
                                 <div className="lb-turns">
                                   {(turns[ex.trace_id] || []).filter((t) => t.role !== 'system').map((t, i) => (
-                                    <div key={i} className={`bubble ${t.role}`}>
-                                      <span className="role">{t.role}</span>
-                                      <pre>{t.content}</pre>
-                                    </div>
+                                    <div key={i} className={`bubble ${t.role}`}><span className="role">{t.role}</span><pre>{t.content}</pre></div>
                                   ))}
                                   {!turns[ex.trace_id] && <div className="lb-dim">loading turns…</div>}
                                 </div>
@@ -352,16 +361,12 @@ function Outcomes({ outcomes }) {
           <div key={c} className="lb-ob-row">
             <span className="lb-ob-label">{c}</span>
             <span className="lb-ob-bar">
-              {Object.entries(byCfg[c]).map(([k, n]) => (
-                <span key={k} style={{ width: `${100 * n / tot}%`, background: OB_COLORS[k] || '#888' }} />
-              ))}
+              {Object.entries(byCfg[c]).map(([k, n]) => (<span key={k} style={{ width: `${100 * n / tot}%`, background: OB_COLORS[k] || '#888' }} />))}
             </span>
           </div>
         )
       })}
-      <div className="lb-legend">
-        {kinds.map((k) => <span key={k}><i style={{ background: OB_COLORS[k] || '#888' }} />{k}</span>)}
-      </div>
+      <div className="lb-legend">{kinds.map((k) => <span key={k}><i style={{ background: OB_COLORS[k] || '#888' }} />{k}</span>)}</div>
     </>
   )
 }

@@ -27,11 +27,22 @@ def main() -> None:
                     help="LLM-as-a-judge score (one extra cheap Bedrock call per run)")
     ap.add_argument("--models", default="", help="CSV of model names to override the config grid")
     ap.add_argument("--prompts", default="", help="CSV of prompt names to override the config grid")
+    ap.add_argument("--models-file", default="",
+                    help="JSON file of model specs [{id,name,family,price_per_1m_in,price_per_1m_out}] "
+                         "to run instead of config.yaml models (used by the web UI)")
     args = ap.parse_args()
 
     cfg = load_config()
     db = cfg.clickhouse.database
     run_id = args.run_id or f"run-{uuid.uuid4().hex[:8]}"
+
+    # The web UI can hand the harness an arbitrary set of models (from the live
+    # Bedrock catalog) via a JSON file, overriding config.yaml's model list.
+    if args.models_file:
+        import json
+        from arena.config import ModelCfg
+        with open(args.models_file) as f:
+            cfg.models = [ModelCfg(**m) for m in json.load(f)]
 
     admin = make_admin_client(cfg.clickhouse)
     ensure_results_tables(admin, db)
