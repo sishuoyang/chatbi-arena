@@ -210,6 +210,18 @@ def bedrock_models():
     global _catalog_cache
     if _catalog_cache is not None:
         return _catalog_cache
+    # Never let this endpoint 500: an unhandled 500 is emitted OUTSIDE the CORS
+    # middleware (no Access-Control-Allow-Origin header), so the browser reports
+    # it as a CORS error. On any failure (e.g. missing/expired AWS creds) fall
+    # back to the priced models from config.yaml so the run composer stays usable.
+    try:
+        return _build_catalog()
+    except Exception as e:  # noqa: BLE001
+        return _fallback_catalog(str(e))
+
+
+def _build_catalog():
+    global _catalog_cache
     import boto3
     bc = boto3.client("bedrock", region_name=_cfg.bedrock.region)
     profiles = [p["inferenceProfileId"]
@@ -256,6 +268,23 @@ def bedrock_models():
     _catalog_cache = {"region": _cfg.bedrock.region, "families": out,
                       "default_ids": sorted(default_ids)}
     return _catalog_cache
+
+
+def _fallback_catalog(reason: str):
+    """Catalog built from the priced config.yaml models when live Bedrock
+    listing is unavailable (e.g. no AWS creds). Returned with a `degraded`
+    note and NOT cached, so a later call retries the live listing."""
+    fams: dict[str, list] = {}
+    for m in _cfg.models:
+        fams.setdefault(m.family, []).append({
+            "id": m.id, "name": m.name, "family": m.family,
+            "size": _size_hint(m.id), "in_default": True,
+            "price_in": m.price_per_1m_in, "price_out": m.price_per_1m_out,
+        })
+    out = [{"family": f, "models": fams[f]}
+           for f in dict.fromkeys(m.family for m in _cfg.models)]
+    return {"region": _cfg.bedrock.region, "families": out,
+            "default_ids": [m.id for m in _cfg.models], "degraded": reason}
 
 
 def _family_key(provider_name: str, cfg) -> str:

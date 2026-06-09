@@ -7,13 +7,12 @@ export const EDGE_COLORS = {
   read: '#f5d90a',       // read-only analytic queries
   control: '#58a6ff',    // orchestration / requests
   trace: '#ec6cb9',      // LangFuse traces + scores
-  telemetry: '#39c5cf',  // OTel telemetry
 }
 
 // Where each component runs -> card accent color (legend, not a bounding box).
 export const ENV = {
   local: { label: 'Local / Docker', color: '#58a6ff' },
-  aws: { label: 'AWS · ap-southeast-1', color: '#ff9900' },
+  aws: { label: 'AWS (Aurora ap-southeast-1 · Bedrock us-east-1)', color: '#ff9900' },
   ch: { label: 'ClickHouse Cloud (AWS)', color: '#f5d90a' },
   saas: { label: 'LangFuse Cloud (SaaS)', color: '#a371f7' },
 }
@@ -26,20 +25,18 @@ const card = (id, env, title, subtitle, kind, w = 215) => ({
 export const componentNodes = [
   card('user', 'local', 'Analyst', 'asks a question', 'user', 170),
   card('datagen', 'local', 'Data generator', 'Faker · seed + mutations', 'job'),
-  card('golden', 'local', 'Golden set', '20 Qs × 5 tiers + golden SQL', 'data'),
+  card('golden', 'local', 'Golden set', '18 Qs × 5 tiers + golden SQL', 'data'),
   card('serving', 'local', 'Serving API', 'FastAPI · POST /ask', 'api'),
   card('harness', 'local', 'Benchmark harness', 'grid runner + grader', 'job'),
   card('agent', 'local', 'Agent core', 'loop · P1–P5 · SQL guard', 'agent', 230),
-  card('collector', 'local', 'OTel collector', 'clickstack-otel-collector', 'otel'),
   card('dashboard', 'local', 'Leaderboard dashboard', 'FastAPI · reads ClickHouse + LangFuse', 'api'),
 
   card('aurora', 'aws', 'Aurora PostgreSQL', 'Serverless v2 · OLTP source', 'db', 235),
-  card('bedrock', 'aws', 'Amazon Bedrock', 'Converse · Nova + Claude', 'ai', 235),
+  card('bedrock', 'aws', 'Amazon Bedrock', 'Converse · Claude/Qwen/DeepSeek/gpt-oss/Kimi', 'ai', 300),
 
   card('cdc', 'ch', 'arena_cdc tables', 'ReplacingMergeTree (CDC landing)', 'db', 300),
   card('views', 'ch', 'v_* analytic views', 'FINAL · dedup current state', 'view', 300),
   card('evalruns', 'ch', 'eval_runs + v_leaderboard', 'results · cost-per-correct', 'db', 300),
-  card('otel', 'ch', 'otel_* / ClickStack', 'traces · metrics · logs', 'otel', 300),
 
   card('langfuse', 'saas', 'LangFuse Cloud', 'traces + correctness/cost/latency', 'trace', 300),
 ]
@@ -69,8 +66,4 @@ export const edges = [
   e('harness-evalruns', 'harness', 'evalruns', 'grade', 'grade by execution accuracy → write', 'data'),
   e('harness-langfuse', 'harness', 'langfuse', 'trace', 'traces + correctness/cost/latency scores', 'trace'),
   e('langfuse-dashboard', 'langfuse', 'dashboard', 'read', 'sessions + conversation traces, read live via the LangFuse API', 'trace'),
-
-  e('datagen-collector', 'datagen', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
-  e('serving-collector', 'serving', 'collector', 'OTLP', 'OTLP telemetry', 'telemetry'),
-  e('collector-otel', 'collector', 'otel', 'write', 'write telemetry tables', 'telemetry'),
 ]

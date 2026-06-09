@@ -23,42 +23,40 @@ data, the operational telemetry, *and* the AI's behavior.
 
 ## What you get
 
-A single web app (`web/`, http://localhost:5174) with two tabs:
+A single web app (`web/`, http://localhost:5174) with three tabs:
 
+- **Countdown** — a live-event "stage" screen for demos: a presenter countdown timer,
+  the model families as contenders, and the current best accuracy per family (read live
+  from the latest run).
 - **Leaderboard** — every model×prompt config ranked by accuracy, **cost-per-correct-answer**
-  (the headline), latency, per-tier accuracy, and an outcome breakdown. Click any
-  config to **drill into its per-question results**, each linking to its **LangFuse
-  trace** (prompt → generated SQL → error → tokens → span timings). A **"View
-  conversation"** button replays the agent's session **live from the LangFuse API**,
-  an **LLM-judge** column scores SQL quality, and links jump to LangFuse's native
-  **Experiment** comparison and **Session** views.
+  (the headline), latency, per-tier accuracy, and an outcome breakdown, with a
+  **cost × accuracy** chart and a **best-value** ranking up top. Click any config to
+  **drill into its per-question results**, each linking to its **LangFuse trace**
+  (prompt → generated SQL → error → tokens → span timings). A **"View conversation"**
+  button replays the agent's session **live from the LangFuse API**, an **LLM-judge**
+  column scores SQL quality, and links jump to LangFuse's native **Experiment** and
+  **Session** views. A **Guided walkthrough** narrates the open-vs-proprietary story by
+  driving the UI itself.
 - **Architecture** — an animated React Flow diagram of the whole system.
 
 Plus a live **`/ask` API**: pose a question, pick a config, watch the SQL, cost, and
 latency change.
 
-(Screenshots: `web/preview-leaderboard.png`, `web/preview-conversation.png`, `web/preview.png`.)
+### Screenshots
+
+**Leaderboard** — the analyst surface: cost-per-correct ranking, a cost × accuracy chart, and per-question drill-downs into LangFuse traces.
+
+![ChatBI Arena leaderboard](docs/images/leaderboard.png)
+
+**Countdown** — the live-event stage shown before a demo.
+
+![ChatBI Arena countdown stage](docs/images/arena.png)
 
 ---
 
 ## Architecture
 
-```
-  LOCAL / Docker (your machine)        AWS ap-southeast-1          ClickHouse Cloud (on AWS)
-  ────────────────────────────         ──────────────────         ─────────────────────────
-  data generator ───insert/update────► Aurora PostgreSQL ──┐
-                                                            │ ClickPipes CDC (logical repl.)
-                                                            ▼
-  agent core  ───Converse (NL→SQL)───► Amazon Bedrock       arena_cdc tables (ReplacingMergeTree)
-  (loop · P1–P5 · SQL guard)                                        │  FINAL + dedup
-        │  read-only SELECT ───────────────────────────────►  v_* analytic views  ◄── the contract
-        ▼                                                            ▲
-  benchmark harness ──grade vs golden──► writes ──────────►  arena.eval_runs / v_leaderboard
-        │                                                            ▲
-        └──traces · scores · datasets/experiments · sessions──► LangFuse Cloud
-  serving /ask · dashboard API · web UI                              │ reads
-  OTel collector (ClickStack) ──telemetry──────────────────►  otel_* / ClickStack tables
-```
+![ChatBI Arena architecture diagram](docs/images/architecture.png)
 
 **The key idea — two lenses, one engine:**
 - **ClickHouse** answers *"which config wins / is the system healthy"* — it holds the
@@ -82,27 +80,6 @@ to Bedrock, extracts the SQL, runs it against the `v_*` views, and compares the 
 set to the cached golden result (by column position, with float rounding and row-set
 normalization). It records correctness, cost (Bedrock tokens × configured prices),
 latency, and an LLM-judge score — to ClickHouse `eval_runs` *and* LangFuse.
-
----
-
-## Repository layout
-
-| Path | What |
-|------|------|
-| `config.yaml` | models, prompt strategies, the grid to run, pricing, eval settings |
-| `arena/config.py` | typed config loader (`config.yaml` + `${ENV}` expansion) |
-| `agents/` | `bedrock` (Converse), `prompts` (P1–P5), `sqlguard`, `chclient` (RO/admin), `loop` (the agent) |
-| `eval/` | `grading` (execution accuracy), `golden`, `results` (`eval_runs`), `langfuse_adapter`, `judge`, `harness` (grid runner) |
-| `golden/questions.yaml` | the golden question set (5 difficulty tiers) |
-| `datagen/generator.py` | synthetic e-commerce generator (→ Aurora or ClickHouse) |
-| `schema/` | seed tables, `v_*` views, view-repoint + schema-context generators |
-| `dashboard/app.py` | FastAPI JSON API (ClickHouse leaderboard + LangFuse-backed endpoints) |
-| `web/` | React SPA — Architecture diagram + Leaderboard tabs (Vite + React Flow) |
-| `serving/api.py` | live `/ask` Chat-BI endpoint (reuses the agent core) |
-| `observability/` | OTel instrumentation + CDC-freshness gauge |
-| `infra/terraform/` | Aurora + networking IaC · `infra/README_clickpipes.md` is the CDC runbook |
-| `scripts/` | `arena.sh` lifecycle + setup/connectivity/ClickPipes helpers |
-| `docs/superpowers/` | the original design spec + implementation plan |
 
 ---
 
@@ -207,7 +184,7 @@ view its results. (The API process must have AWS Bedrock creds — start it with
 AWS_PROFILE=<profile> python -m eval.harness --run-id <name> [--models a,b] [--prompts x,y] [--no-judge] [--limit N]
 ```
 - Each invocation is a **run** (`run_id`); it writes one row per *(config × question)* to
-  `arena.eval_runs` and a trace per run to LangFuse. The web UI's run selector picks which run to view.
+  `arena_house.eval_runs` and a trace per run to LangFuse. The web UI's run selector picks which run to view.
 - The grid (which models × which prompts) defaults to `config.yaml`; `--models`/`--prompts` override it.
 - `--judge` (default on) adds a cheap LLM-judge score; `--limit N` runs the first N questions.
 
@@ -227,13 +204,14 @@ Adding a model or prompt is a config edit, not a code change.
 
 ## Cost to run the demo
 
-Rough estimates for **ap-southeast-1** (~mid-2026 on-demand rates; verify against
-current pricing). The dataset is tiny (~100k rows), so storage/I/O are negligible —
-the costs that matter are Aurora compute and Bedrock tokens.
+Rough estimates (~mid-2026 on-demand rates; verify against current pricing) — Aurora and
+ClickHouse Cloud run in **ap-southeast-1**, Bedrock in **us-east-1**. The dataset is tiny
+(~100k rows), so storage/I/O are negligible — the costs that matter are Aurora compute and
+Bedrock tokens.
 
 | Component | Cost | Notes |
 |---|---|---|
-| **Bedrock** (Converse) | **~$0.40 per full grid run** · <$0.01 per cheap-model run · ~$0.0001–0.005 per live `/ask` | Measured: 4 models × 5 prompts × 18 Qs = 360 calls. Claude Sonnet is ~$0.34 of it; Nova/Haiku are pennies. |
+| **Bedrock** (Converse) | **~$0.40 per grid run** · <$0.01 per cheap-model run · ~$0.0001–0.005 per live `/ask` | e.g. 6 models × 3 prompts × 18 Qs = 324 calls. The Claude models dominate the cost; the open models (Qwen, gpt-oss, DeepSeek) are pennies. |
 | **Aurora PostgreSQL Serverless v2** | **~$0.07–0.14 / hour** running | 0.5–2 ACU; mostly idle at min capacity. The main "left running" cost (~$1.5–3/day). |
 | **ClickPipes CDC + ClickHouse Cloud** | small while running | Metered by ClickHouse Cloud; minor for this dataset. Your service has its own baseline (scales to zero when idle). |
 | **LangFuse Cloud** | **$0** | Free tier covers a few hundred traces per run. |
@@ -252,9 +230,10 @@ compute-hours. The measurement-core path (`up --seed-only`, one cheap model) is
 
 - **Bedrock `AccessDeniedException`** — the model isn't enabled, or the profile/role is
   denied `bedrock:InvokeModel`. Enable model access in the Bedrock console
-  (ap-southeast-1) and use a profile/role that allows it. Some federated/SSO sessions
-  are scoped down; pick one with Bedrock rights. Nova requires the **inference profile**
-  id (e.g. `apac.amazon.nova-lite-v1:0`), not the bare model id.
+  (**us-east-1**) and use a profile/role that allows it. Some federated/SSO sessions
+  are scoped down; pick one with Bedrock rights. Many models must be invoked via an
+  **inference-profile id** (e.g. `us.anthropic.…`) rather than the bare model id — the
+  live catalog resolves this for you.
 - **Port 8000 in use** — the dashboard API uses `:8000`; `arena.sh up` warns if it can't
   bind. Free the port (or change it) and re-run `scripts/arena.sh serve`.
 - **Leaderboard tab says "can't reach API"** — start the JSON API:
@@ -265,7 +244,5 @@ compute-hours. The measurement-core path (`up --seed-only`, one cheap model) is
 ---
 
 ## Docs
-- Design spec: [`docs/superpowers/specs/2026-06-06-chatbi-arena-poc-design.md`](docs/superpowers/specs/2026-06-06-chatbi-arena-poc-design.md)
-- Implementation plan: [`docs/superpowers/plans/2026-06-06-chatbi-arena-measurement-core.md`](docs/superpowers/plans/2026-06-06-chatbi-arena-measurement-core.md)
 - CDC runbook: [`infra/README_clickpipes.md`](infra/README_clickpipes.md)
 - Web UI details: [`web/README.md`](web/README.md)

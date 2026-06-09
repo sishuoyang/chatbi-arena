@@ -19,7 +19,6 @@ const FLOW_LEGEND = [
   ['read-only query', EDGE_COLORS.read],
   ['orchestration', EDGE_COLORS.control],
   ['LangFuse traces', EDGE_COLORS.trace],
-  ['OTel telemetry', EDGE_COLORS.telemetry],
 ]
 
 export default function FlowDiagram() {
