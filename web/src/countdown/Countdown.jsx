@@ -75,13 +75,17 @@ export default function Countdown({ duration, remaining, running, onPreset, onTo
       <Embers />
       {live && <Confetti />}
 
-      <div className="cd-kicker"><span className="dmd">◆</span> ChatBI Arena · Live NL→SQL Benchmark <span className="dmd">◆</span></div>
-      <h1 className="cd-head">
-        {live ? <>⚔ The <span className="glow">Arena</span> is Live ⚔</> : <>Guess who will <span className="glow">win</span><br/>the Arena?</>}
-      </h1>
+      {/* LEFT (≈70%): title + the arena image */}
+      <div className="cd-left">
+        <div className="cd-titleblock">
+          <div className="cd-kicker"><span className="dmd">◆</span> ChatBI Arena · Live NL→SQL Benchmark <span className="dmd">◆</span></div>
+          <h1 className="cd-head">
+            {live ? <>⚔ The <span className="glow">Arena</span> is Live ⚔</> : <>Guess who will <span className="glow">win</span> the Arena?</>}
+          </h1>
+        </div>
 
-      {/* stage — the original AI-generated arena, framed, with sword/beam VFX */}
-      <div className="cd-stage">
+        {/* stage — the original AI-generated arena, framed, with sword/beam VFX */}
+        <div className="cd-stage">
         <img className="cd-arena-img" src={arenaImg} alt="ChatBI Arena — models battle for NL→SQL supremacy" />
         <div className="cd-vfx" aria-hidden="true">
           <div className="beam b1" /><div className="beam b2" /><div className="beam b3" /><div className="beam b4" />
@@ -91,8 +95,11 @@ export default function Countdown({ duration, remaining, running, onPreset, onTo
             <span key={i} className="cd-glint" style={{ left: `${g.left}%`, top: `${g.top}%`, animationDuration: `${g.dur}s`, animationDelay: `${g.delay}s` }} />
           ))}
         </div>
+        </div>
       </div>
 
+      {/* RIGHT (≈30%): the countdown timer + presenter controls */}
+      <div className="cd-right">
       {/* timer */}
       <div className="cd-timerwrap">
         <div className="cd-timerlabel">{live ? 'Fight!' : 'Demo starts in'}</div>
@@ -134,6 +141,7 @@ export default function Countdown({ duration, remaining, running, onPreset, onTo
         </button>
         <button className="btn ghost" onClick={onReset}>Reset</button>
       </div>
+      </div>{/* /cd-right */}
     </div>
   )
 }
