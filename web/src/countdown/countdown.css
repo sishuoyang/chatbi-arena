@@ -25,7 +25,7 @@
 @media (max-width: 960px) {
   .cd { flex-direction: column; align-items: center; overflow-y: auto; padding-bottom: 28px; }
   .cd-left, .cd-right { flex: none; width: 100%; }
-  .cd-right { border-left: none; border-top: 1px solid var(--line); background: transparent; }
+  .cd-right { background: transparent; }
   .cd-stage { flex: none; height: clamp(280px, 42vh, 440px); }
 }
 .cd-embers { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
