@@ -28,25 +28,28 @@ RUN_DIR="$ROOT/.run"
 log() { printf '\n\033[1;33m▶ %s\033[0m\n' "$*"; }
 load_env() { set -a; . ./.env; set +a; }
 
-# Start the dashboard JSON API (:8000) + the React web UI (:5174) in the
+# Start the dashboard JSON API (:$API_PORT, default 8000) + the React web UI (:5174) in the
 # background; logs in .run/. Idempotent (kills prior instances first).
 start_servers() {
   local api_only="${1:-}" ok_api=0 ok_web=0 i
+  # Backend port is configurable: API_PORT=9000 scripts/arena.sh serve
+  local api_port="${API_PORT:-8000}"
   mkdir -p "$RUN_DIR"
-  log "Starting dashboard API (:8000)$([ "$api_only" = "--api-only" ] || echo ' + web UI (:5174)')"
+  log "Starting dashboard API (:$api_port)$([ "$api_only" = "--api-only" ] || echo ' + web UI (:5174)')"
   pkill -f "uvicorn dashboard.app" 2>/dev/null || true
   ( cd "$ROOT" && PYTHONPATH="$ROOT" nohup "$PY" -m uvicorn dashboard.app:app \
-      --port 8000 --log-level warning >"$RUN_DIR/dashboard-api.log" 2>&1 & )
+      --port "$api_port" --log-level warning >"$RUN_DIR/dashboard-api.log" 2>&1 & )
   # -fs => only a real 2xx counts (a foreign app 404ing on the port is NOT "up").
-  for i in $(seq 1 30); do curl -fs -o /dev/null localhost:8000/api/runs && { ok_api=1; break; }; sleep 1; done
-  echo "  dashboard API : http://localhost:8000  [$([ $ok_api = 1 ] && echo ready || echo 'NOT up')]  (.run/dashboard-api.log)"
-  [ $ok_api = 1 ] || echo "  ⚠ dashboard API didn't come up — is port 8000 already in use? check .run/dashboard-api.log"
+  for i in $(seq 1 30); do curl -fs -o /dev/null "localhost:$api_port/api/runs" && { ok_api=1; break; }; sleep 1; done
+  echo "  dashboard API : http://localhost:$api_port  [$([ $ok_api = 1 ] && echo ready || echo 'NOT up')]  (.run/dashboard-api.log)"
+  [ $ok_api = 1 ] || echo "  ⚠ dashboard API didn't come up — is port $api_port already in use? check .run/dashboard-api.log"
 
   if [ "$api_only" = "--api-only" ]; then return; fi
 
   pkill -f "vite" 2>/dev/null || true
   [ -d "$ROOT/web/node_modules" ] || ( cd "$ROOT/web" && npm install )
-  ( cd "$ROOT/web" && nohup npm run dev -- --port 5174 >"$RUN_DIR/web.log" 2>&1 & )
+  # point the web UI at whatever port the API bound to
+  ( cd "$ROOT/web" && VITE_API_BASE="http://localhost:$api_port" nohup npm run dev -- --port 5174 >"$RUN_DIR/web.log" 2>&1 & )
   for i in $(seq 1 45); do curl -fs -o /dev/null localhost:5174 && { ok_web=1; break; }; sleep 1; done
   echo "  web UI        : http://localhost:5174  [$([ $ok_web = 1 ] && echo ready || echo 'NOT up')]  (.run/web.log)"
 }
@@ -164,7 +167,7 @@ status() {
   log "ClickStack collector"
   docker ps --filter name=arena-clickstack-collector --format '  {{.Names}} {{.Status}}' || true
   log "Web / API servers"
-  curl -fs -o /dev/null localhost:8000/api/runs && echo "  dashboard API :8000  up" || echo "  dashboard API :8000  down"
+  curl -fs -o /dev/null "localhost:${API_PORT:-8000}/api/runs" && echo "  dashboard API :${API_PORT:-8000}  up" || echo "  dashboard API :${API_PORT:-8000}  down"
   curl -fs -o /dev/null localhost:5174 && echo "  web UI        :5174  up" || echo "  web UI        :5174  down"
   log "ClickHouse view counts"
   $PY -c "
